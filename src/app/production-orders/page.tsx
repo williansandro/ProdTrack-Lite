@@ -2,9 +2,8 @@
 import { getProductionOrders } from '@/lib/actions/production-order.actions';
 import { getSkus } from '@/lib/actions/sku.actions';
 import { ProductionOrderClientPage } from './ProductionOrderClientPage';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Keep for layout consistency if needed
 
-export const revalidate = 0; 
+export const dynamic = 'force-dynamic'; // Ensures the page is always dynamically rendered
 
 export default async function ProductionOrdersPage() {
   const productionOrders = await getProductionOrders();
@@ -14,3 +13,4 @@ export default async function ProductionOrdersPage() {
     <ProductionOrderClientPage initialProductionOrders={productionOrders} skus={skus} />
   );
 }
+
