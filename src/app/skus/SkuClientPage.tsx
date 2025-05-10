@@ -6,14 +6,6 @@ import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -25,34 +17,40 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SkuForm } from '@/components/skus/SkuForm';
 import { DataTable } from '@/components/shared/DataTable';
-import { PlusCircle, Edit3, Trash2, MoreHorizontal, Trash } from 'lucide-react';
+import { Edit3, Trash2, MoreHorizontal, Trash, PackagePlus, ListChecks } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { deleteSku, deleteMultipleSkus } from '@/lib/actions/sku.actions';
 import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
-
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 
 interface SkuClientPageProps {
   initialSkus: SKU[];
 }
 
 export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingSku, setEditingSku] = useState<SKU | null>(null);
+  // Note: Dialog for editing is removed, form will be inline or a separate page if complex editing needed
+  // For now, SkuForm is used for creation directly in the "Cadastrar Novo SKU" card.
+  // Editing could be implemented by navigating to a new page /skus/[id]/edit or using a modal triggered by the edit button.
+  // The current SkuForm can accept an 'sku' prop for editing, but its display logic here is simplified.
+
   const [deletingSku, setDeletingSku] = useState<SKU | null>(null);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+  const [editingSkuModal, setEditingSkuModal] = useState<SKU | null>(null); // For a modal edit, not used yet
 
   const { toast } = useToast();
 
   const handleFormSubmit = () => {
-    setIsFormOpen(false);
-    setEditingSku(null);
+    // This would be called by SkuForm, e.g., to close a dialog if it were used for editing.
+    // For the inline creation form, it might just reset the form or give feedback.
   };
 
   const openEditForm = (sku: SKU) => {
-    setEditingSku(sku);
-    setIsFormOpen(true);
+    // For now, this doesn't open a dialog. An edit page or modal would be needed.
+    // setEditingSkuModal(sku); // If using an edit modal
+    toast({ title: "Editar SKU", description: `Funcionalidade de edição para ${sku.code} a ser implementada.`, variant: "default"});
+    console.log("Edit SKU:", sku);
   };
 
   const openDeleteConfirm = (sku: SKU) => {
@@ -84,7 +82,7 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
       toast({ title: 'Erro na Exclusão em Massa', description: result.message, variant: 'destructive' });
     } else {
       toast({ title: 'Sucesso', description: result.message });
-      setRowSelection({}); // Clear selection
+      setRowSelection({}); 
     }
     setIsBulkDeleteConfirmOpen(false);
   };
@@ -93,46 +91,65 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
     {
       accessorKey: "code",
       header: "Código",
+      cell: ({ row }) => <span className="text-primary-dark font-medium">{row.original.code}</span>,
     },
     {
       accessorKey: "description",
-      header: "Descrição",
+      header: "Nome", // Changed from "Descrição"
       cell: ({ row }) => <div className="truncate max-w-xs">{row.original.description}</div>,
     },
     {
-      accessorKey: "createdAt",
-      header: "Criado Em",
-      cell: ({ row }) => <FormattedDateCell dateValue={row.original.createdAt} />,
+      accessorKey: "unitOfMeasure",
+      header: "Un. Medida",
+      cell: ({ row }) => row.original.unitOfMeasure,
     },
-    {
-      accessorKey: "updatedAt",
-      header: "Atualizado Em",
-      cell: ({ row }) => <FormattedDateCell dateValue={row.original.updatedAt} />,
-    },
+    // CreatedAt and UpdatedAt columns removed as per image
+    // {
+    //   accessorKey: "createdAt",
+    //   header: "Criado Em",
+    //   cell: ({ row }) => <FormattedDateCell dateValue={row.original.createdAt} />,
+    // },
+    // {
+    //   accessorKey: "updatedAt",
+    //   header: "Atualizado Em",
+    //   cell: ({ row }) => <FormattedDateCell dateValue={row.original.updatedAt} />,
+    // },
     {
       id: "actions",
+      header: "Ações",
       cell: ({ row }) => {
         const sku = row.original;
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Abrir menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Ações</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => openEditForm(sku)}>
-                <Edit3 className="mr-2 h-4 w-4" />
-                Editar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openDeleteConfirm(sku)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex space-x-2">
+            <Button variant="ghost" size="icon" onClick={() => openEditForm(sku)} className="text-accent hover:text-accent-foreground">
+              <Edit3 className="h-4 w-4" />
+              <span className="sr-only">Editar</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => openDeleteConfirm(sku)} className="text-destructive hover:text-destructive-foreground">
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">Excluir</span>
+            </Button>
+          </div>
+          // Dropdown menu removed for direct icon buttons as per image
+          // <DropdownMenu>
+          //   <DropdownMenuTrigger asChild>
+          //     <Button variant="ghost" className="h-8 w-8 p-0">
+          //       <span className="sr-only">Abrir menu</span>
+          //       <MoreHorizontal className="h-4 w-4" />
+          //     </Button>
+          //   </DropdownMenuTrigger>
+          //   <DropdownMenuContent align="end" className="bg-card border-border">
+          //     <DropdownMenuLabel>Ações</DropdownMenuLabel>
+          //     <DropdownMenuItem onClick={() => openEditForm(sku)}>
+          //       <Edit3 className="mr-2 h-4 w-4" />
+          //       Editar
+          //     </DropdownMenuItem>
+          //     <DropdownMenuItem onClick={() => openDeleteConfirm(sku)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+          //       <Trash2 className="mr-2 h-4 w-4" />
+          //       Excluir
+          //     </DropdownMenuItem>
+          //   </DropdownMenuContent>
+          // </DropdownMenu>
         );
       },
     },
@@ -141,53 +158,58 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Gerenciamento de SKUs</h1>
-        <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if(!open) setEditingSku(null); }}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Novo SKU
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px]">
-            <DialogHeader>
-              <DialogTitle>{editingSku ? 'Editar SKU' : 'Criar Novo SKU'}</DialogTitle>
-              <DialogDescription>
-                {editingSku ? 'Atualize os detalhes deste SKU.' : 'Preencha os detalhes para o novo SKU.'}
-              </DialogDescription>
-            </DialogHeader>
-            <SkuForm sku={editingSku} onFormSubmit={handleFormSubmit} />
-          </DialogContent>
-        </Dialog>
-      </div>
+      {/* Section for Creating New SKU */}
+      <Card className="bg-card border-border shadow-lg">
+        <CardHeader className="pb-4">
+          <div className="flex items-center space-x-2">
+            <PackagePlus className="h-6 w-6 text-accent" />
+            <CardTitle className="text-xl font-semibold text-accent">Cadastrar Novo SKU</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <SkuForm onFormSubmit={handleFormSubmit} />
+        </CardContent>
+      </Card>
+      
+      {/* Section for Listing SKUs */}
+      <Card className="bg-card border-border shadow-lg">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <ListChecks className="h-6 w-6 text-accent" />
+              <CardTitle className="text-xl font-semibold text-accent">SKUs Cadastrados</CardTitle>
+            </div>
+            {selectedSkuIds.length > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => setIsBulkDeleteConfirmOpen(true)}
+                disabled={selectedSkuIds.length === 0}
+                size="sm"
+              >
+                <Trash className="mr-2 h-4 w-4" />
+                Excluir Selecionados ({selectedSkuIds.length})
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={columns}
+            data={initialSkus}
+            filterColumn="code" // Keep filtering if desired, though not shown in image
+            filterPlaceholder="Filtrar por código..." //
+            enableRowSelection={true}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            getId={(row) => row.id}
+          />
+        </CardContent>
+      </Card>
 
-      {selectedSkuIds.length > 0 && (
-        <div className="flex items-center justify-start space-x-2 my-4">
-          <Button
-            variant="destructive"
-            onClick={() => setIsBulkDeleteConfirmOpen(true)}
-            disabled={selectedSkuIds.length === 0}
-          >
-            <Trash className="mr-2 h-4 w-4" />
-            Excluir {selectedSkuIds.length} SKU(s) Selecionado(s)
-          </Button>
-        </div>
-      )}
-
-      <DataTable
-        columns={columns}
-        data={initialSkus}
-        filterColumn="code"
-        filterPlaceholder="Filtrar por código..."
-        enableRowSelection={true}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        getId={(row) => row.id}
-      />
 
       {deletingSku && (
         <AlertDialog open={!!deletingSku} onOpenChange={() => setDeletingSku(null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
               <AlertDialogDescription>
@@ -206,7 +228,7 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
 
       {isBulkDeleteConfirmOpen && (
         <AlertDialog open={isBulkDeleteConfirmOpen} onOpenChange={setIsBulkDeleteConfirmOpen}>
-          <AlertDialogContent>
+          <AlertDialogContent className="bg-card border-border">
             <AlertDialogHeader>
               <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
               <AlertDialogDescription>

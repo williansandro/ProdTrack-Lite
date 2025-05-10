@@ -16,20 +16,28 @@ const ProductionOrderSchema = z.object({
 });
 
 export async function getProductionOrders(): Promise<ProductionOrder[]> {
-  // await new Promise(resolve => setTimeout(resolve, 200)); // Simulate network delay
-  // Ensure related SKU code is up-to-date if it can change
-  return [...db.productionOrders].map(po => {
+  return db.productionOrders.map(po => {
     const sku = db.skus.find(s => s.id === po.skuId);
-    return { ...po, skuCode: sku?.code || 'N/A' };
+    return { 
+      ...po, 
+      skuCode: sku?.code || 'N/A',
+      createdAt: new Date(po.createdAt),
+      updatedAt: new Date(po.updatedAt),
+      // startTime and endTime are already numbers (timestamps)
+    };
   }).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function getProductionOrderById(id: string): Promise<ProductionOrder | undefined> {
-  // await new Promise(resolve => setTimeout(resolve, 100));
   const po = db.productionOrders.find(order => order.id === id);
   if (po) {
     const sku = db.skus.find(s => s.id === po.skuId);
-    return { ...po, skuCode: sku?.code || 'N/A' };
+    return { 
+        ...po, 
+        skuCode: sku?.code || 'N/A',
+        createdAt: new Date(po.createdAt),
+        updatedAt: new Date(po.updatedAt),
+    };
   }
   return undefined;
 }
@@ -253,3 +261,4 @@ export async function deleteMultipleProductionOrders(ids: string[]) {
     error: inProgressIds.length > 0 || notFoundIds.length > 0 
   };
 }
+

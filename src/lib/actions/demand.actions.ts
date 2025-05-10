@@ -17,14 +17,17 @@ const DemandFormSchema = z.object({
 });
 
 export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
-  // await new Promise(resolve => setTimeout(resolve, 300)); // Simulate delay
-
-  const demandsWithSku = db.demands.map(demand => {
+  const demandsWithSkuAndDates = db.demands.map(demand => {
     const sku = db.skus.find(s => s.id === demand.skuId);
-    return { ...demand, skuCode: sku?.code || 'N/A' };
+    return { 
+      ...demand, 
+      skuCode: sku?.code || 'N/A',
+      createdAt: new Date(demand.createdAt),
+      updatedAt: new Date(demand.updatedAt),
+    };
   });
 
-  const demandsWithProgress = demandsWithSku.map(demand => {
+  const demandsWithProgress = demandsWithSkuAndDates.map(demand => {
     const [yearStr, monthStr] = demand.monthYear.split('-');
     const demandMonth = parseInt(monthStr, 10) - 1; // Month is 0-indexed in JS Date
     const demandYear = parseInt(yearStr, 10);
@@ -34,7 +37,7 @@ export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
         po.skuId === demand.skuId &&
         po.status === 'completed' &&
         po.endTime && // Ensure there's an end time
-        getMonth(new Date(po.endTime)) === demandMonth &&
+        getMonth(new Date(po.endTime)) === demandMonth && // po.endTime is a timestamp
         getYear(new Date(po.endTime)) === demandYear &&
         typeof po.deliveredQuantity === 'number'
       )
@@ -203,3 +206,4 @@ export async function deleteMultipleDemands(ids: string[]) {
 
   return { message: `${deletedCount} demanda(s) excluída(s) com sucesso.` };
 }
+

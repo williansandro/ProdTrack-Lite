@@ -3,6 +3,7 @@ export interface SKU {
   id: string;
   code: string;
   description: string;
+  unitOfMeasure: string; // Added unit of measure
   createdAt: Date;
   updatedAt: Date;
 }

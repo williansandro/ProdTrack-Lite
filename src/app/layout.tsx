@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/toaster"; // For notifications
 
 
 export const metadata: Metadata = {
-  title: 'ProdTrack Lite',
+  title: 'PCP Tracker',
   description: 'Acompanhe sua produção com facilidade.',
 };
 
@@ -17,11 +17,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning className={GeistSans.variable}>
+    <html lang="pt-BR" suppressHydrationWarning className={`${GeistSans.variable} dark`}>
       {/* 
         The `GeistSans.variable` class on the <html> tag makes the CSS variable 
         (e.g., --font-geist-sans) available. The `globals.css` file then uses this 
         variable to set the font-family on the body.
+        Added "dark" class to default to dark theme.
       */}
       <body className="antialiased">
         <AppLayout>{children}</AppLayout>

@@ -4,21 +4,32 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { SKU, SkuFormData } from '@/lib/types';
-import { db, generateId } from '@/lib/data'; // Using the mock db
+import { db, generateId } from '@/lib/data'; 
 
 const SkuSchema = z.object({
   code: z.string().min(1, { message: 'Código é obrigatório.' }).max(50),
   description: z.string().min(1, { message: 'Descrição é obrigatória.' }).max(255),
+  unitOfMeasure: z.string().min(1, { message: 'Unidade de Medida é obrigatória.' }).max(10, 'Un. Medida deve ter 10 caracteres ou menos'),
 });
 
 export async function getSkus(): Promise<SKU[]> {
-  // await new Promise(resolve => setTimeout(resolve, 200)); // Simulate network delay
-  return [...db.skus].sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return db.skus.map(sku => ({
+    ...sku,
+    createdAt: new Date(sku.createdAt),
+    updatedAt: new Date(sku.updatedAt),
+  })).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function getSkuById(id: string): Promise<SKU | undefined> {
-  // await new Promise(resolve => setTimeout(resolve, 100));
-  return db.skus.find(sku => sku.id === id);
+  const sku = db.skus.find(sku => sku.id === id);
+  if (sku) {
+    return {
+      ...sku,
+      createdAt: new Date(sku.createdAt),
+      updatedAt: new Date(sku.updatedAt),
+    };
+  }
+  return undefined;
 }
 
 export async function createSku(formData: SkuFormData) {
@@ -31,7 +42,7 @@ export async function createSku(formData: SkuFormData) {
     };
   }
 
-  const { code, description } = validatedFields.data;
+  const { code, description, unitOfMeasure } = validatedFields.data;
 
   const existingSku = db.skus.find(sku => sku.code.toLowerCase() === code.toLowerCase());
   if (existingSku) {
@@ -45,16 +56,17 @@ export async function createSku(formData: SkuFormData) {
     id: generateId('sku'),
     code,
     description,
+    unitOfMeasure,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  db.skus.unshift(newSku); // Add to the beginning of the array
+  db.skus.unshift(newSku); 
 
   revalidatePath('/skus');
-  revalidatePath('/production-orders'); // SKU list is used here
-  revalidatePath('/demand-planning'); // SKU list is used here
-  revalidatePath('/dashboard'); // Dashboard might use SKU counts
+  revalidatePath('/production-orders'); 
+  revalidatePath('/demand-planning'); 
+  revalidatePath('/dashboard'); 
   return { message: 'SKU criado com sucesso.', sku: newSku };
 }
 
@@ -68,14 +80,13 @@ export async function updateSku(id: string, formData: SkuFormData) {
     };
   }
 
-  const { code, description } = validatedFields.data;
+  const { code, description, unitOfMeasure } = validatedFields.data;
   const skuIndex = db.skus.findIndex(sku => sku.id === id);
 
   if (skuIndex === -1) {
     return { message: 'SKU não encontrado.' , error: true};
   }
 
-  // Check if new code conflicts with another existing SKU
   const existingSkuWithCode = db.skus.find(sku => sku.code.toLowerCase() === code.toLowerCase() && sku.id !== id);
   if (existingSkuWithCode) {
     return {
@@ -88,6 +99,7 @@ export async function updateSku(id: string, formData: SkuFormData) {
     ...db.skus[skuIndex],
     code,
     description,
+    unitOfMeasure,
     updatedAt: new Date(),
   };
 
@@ -173,3 +185,4 @@ export async function deleteMultipleSkus(ids: string[]) {
     error: inUseCount > 0 || notFoundIds.length > 0 
   };
 }
+
