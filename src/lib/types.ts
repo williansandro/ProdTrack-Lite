@@ -35,5 +35,13 @@ export interface Demand {
 
 // Helper type for form data, typically without id, createdAt, updatedAt
 export type SkuFormData = Omit<SKU, 'id' | 'createdAt' | 'updatedAt'>;
-export type ProductionOrderFormData = Omit<ProductionOrder, 'id' | 'skuCode' | 'status' | 'startTime' | 'endTime' | 'totalProductionTime' | 'createdAt' | 'updatedAt'> & { quantity: string }; // quantity as string from form
+
+// For ProductionOrderForm - quantity will be string from input, notes is optional
+export type ProductionOrderFormData = {
+  skuId: string;
+  quantity: string; // Will be coerced to number
+  notes?: string;
+};
+
 export type DemandFormData = Omit<Demand, 'id' | 'skuCode' | 'createdAt' | 'updatedAt'> & { targetQuantity: string }; // targetQuantity as string from form
+
