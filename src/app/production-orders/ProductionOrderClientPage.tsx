@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label';
 import { DataTable } from '@/components/shared/DataTable';
 import { ProductionOrderForm } from '@/components/production-orders/ProductionOrderForm';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, Edit3, Trash2, Play, CheckCircle, XCircle, PlusCircle, Info } from 'lucide-react';
+import { MoreHorizontal, Edit3, Trash2, Play, CheckCircle, XCircle, PlusCircle, Info, Clock } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -40,7 +40,7 @@ import {
 } from '@/lib/actions/production-order.actions';
 import { differenceInSeconds } from 'date-fns';
 import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
-import { Progress } from '@/components/ui/progress'; // Import Progress component
+import { Progress } from '@/components/ui/progress'; 
 
 interface ProductionOrderClientPageProps {
   initialProductionOrders: ProductionOrder[];
@@ -194,9 +194,9 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
           const percentage = Math.min(100, Math.max(0, (order.deliveredQuantity / order.quantity) * 100));
           let progressColorClass = 'bg-green-500'; // Default to green
           if (percentage <= 33) {
-            progressColorClass = 'bg-red-500'; // Use Tailwind red for destructive/low progress
+            progressColorClass = 'bg-red-500'; 
           } else if (percentage <= 66) {
-            progressColorClass = 'bg-yellow-500'; // Use Tailwind yellow for medium progress
+            progressColorClass = 'bg-yellow-500'; 
           }
           
           return (
@@ -228,8 +228,22 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     },
     {
         accessorKey: "totalProductionTime",
-        header: "Tempo de Produção",
+        header: () => <div className="flex items-center"><Clock className="mr-1 h-4 w-4 text-muted-foreground" /> Tempo Total</div>,
         cell: ({ row }) => <TimerCell order={row.original} />,
+    },
+    {
+      accessorKey: "secondsPerUnit",
+      header: "Seg. / Un.",
+      cell: ({ row }) => {
+        const order = row.original;
+        if (order.status === 'completed' && typeof order.secondsPerUnit === 'number' && order.secondsPerUnit > 0) {
+          return <span className="tabular-nums">{order.secondsPerUnit.toFixed(2)} s/un.</span>;
+        }
+        if (order.status === 'completed' && (typeof order.secondsPerUnit !== 'number' || order.secondsPerUnit <= 0)) {
+          return <Badge variant="outline" className="text-muted-foreground">N/A</Badge>;
+        }
+        return <Badge variant="outline" className="text-muted-foreground">-</Badge>;
+      }
     },
     {
       accessorKey: "createdAt",
@@ -416,3 +430,4 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     </div>
   );
 }
+

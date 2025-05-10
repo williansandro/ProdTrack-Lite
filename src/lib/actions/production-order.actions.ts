@@ -151,17 +151,19 @@ export async function completeProductionOrder(id: string, deliveredQuantity: num
   if (typeof deliveredQuantity !== 'number' || !Number.isInteger(deliveredQuantity) || deliveredQuantity < 0) {
     return { message: 'Quantidade entregue fornecida é inválida. Deve ser um número inteiro não negativo.', error: true };
   }
-  // Optional: Add validation like deliveredQuantity <= order.quantity if needed
-  // if (deliveredQuantity > order.quantity) {
-  //   return { message: `Quantidade entregue (${deliveredQuantity}) não pode exceder a quantidade planejada (${order.quantity}).`, error: true };
-  // }
-
 
   order.status = 'completed';
   order.endTime = Date.now();
   order.totalProductionTime = order.endTime - (order.startTime || order.endTime); // ensure startTime exists
   order.deliveredQuantity = deliveredQuantity;
   order.updatedAt = new Date();
+
+  if (deliveredQuantity > 0 && order.totalProductionTime && order.totalProductionTime > 0) {
+    order.secondsPerUnit = (order.totalProductionTime / 1000) / deliveredQuantity;
+  } else {
+    order.secondsPerUnit = undefined;
+  }
+
   revalidatePath('/production-orders');
   return { message: `Pedido de Produção concluído com ${deliveredQuantity} unidades entregues.` };
 }
@@ -199,3 +201,4 @@ export async function deleteProductionOrder(id: string) {
   revalidatePath('/production-orders');
   return { message: 'Pedido de Produção excluído com sucesso.' };
 }
+

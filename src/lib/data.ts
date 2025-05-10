@@ -26,6 +26,8 @@ export const db: DataStore = {
       startTime: new Date('2024-07-10T09:00:00Z').getTime(), 
       endTime: new Date('2024-07-10T17:30:00Z').getTime(), 
       totalProductionTime: (new Date('2024-07-10T17:30:00Z').getTime() - new Date('2024-07-10T09:00:00Z').getTime()), 
+      deliveredQuantity: 95, // Example: 95 units delivered
+      secondsPerUnit: ((new Date('2024-07-10T17:30:00Z').getTime() - new Date('2024-07-10T09:00:00Z').getTime()) / 1000) / 95, // Calculated
       notes: "Lote inicial, verificar qualidade.",
       createdAt: new Date('2024-07-09T08:00:00Z'), 
       updatedAt: new Date('2024-07-10T17:30:00Z')
@@ -105,4 +107,5 @@ export const db: DataStore = {
 
 // Helper to generate unique IDs
 export const generateId = (prefix: string = 'id') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
+
 

@@ -19,6 +19,7 @@ export interface ProductionOrder {
   endTime?: number; // Timestamp (Date.now())
   totalProductionTime?: number; // in milliseconds
   deliveredQuantity?: number; // Actual quantity delivered upon completion
+  secondsPerUnit?: number; // Seconds per unit, calculated on completion
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -45,4 +46,5 @@ export type ProductionOrderFormData = {
 };
 
 export type DemandFormData = Omit<Demand, 'id' | 'skuCode' | 'createdAt' | 'updatedAt'> & { targetQuantity: string }; // targetQuantity as string from form
+
 
