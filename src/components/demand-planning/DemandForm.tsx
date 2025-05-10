@@ -52,6 +52,8 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
   const [selectedMonth, setSelectedMonth] = useState<Date | undefined>(
     demand?.monthYear ? parse(demand.monthYear, 'yyyy-MM', new Date()) : undefined
   );
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
 
   const form = useForm<DemandFormData>({
     resolver: zodResolver(DemandFormSchemaClient),
@@ -73,6 +75,8 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
       });
     } else {
       const currentMonth = new Date();
+      // Set day to 1 to avoid issues with month changes if current day doesn't exist in another month
+      currentMonth.setDate(1); 
       setSelectedMonth(currentMonth);
       form.reset({
         skuId: '',
@@ -179,7 +183,7 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
             render={({ field }) => (
                 <FormItem className="flex flex-col">
                 <FormLabel>Mês/Ano da Demanda</FormLabel>
-                <Popover>
+                <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                     <PopoverTrigger asChild>
                     <FormControl>
                         <Button
@@ -205,29 +209,19 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
                         captionLayout="dropdown-buttons"
                         selected={selectedMonth}
                         onSelect={(date) => {
-                            setSelectedMonth(date);
                             if (date) {
-                                field.onChange(format(date, "yyyy-MM"));
+                                // Ensure we are setting the first of the month to avoid timezone issues if that becomes relevant
+                                const newSelectedDate = new Date(date.getFullYear(), date.getMonth(), 1);
+                                setSelectedMonth(newSelectedDate);
+                                field.onChange(format(newSelectedDate, "yyyy-MM"));
                             }
+                            setIsCalendarOpen(false); // Close calendar on selection
                         }}
                         fromYear={new Date().getFullYear() - 5}
                         toYear={new Date().getFullYear() + 5}
                         disabled={(date) => form.formState.isSubmitting}
-                        defaultMonth={selectedMonth || new Date()}
+                        defaultMonth={selectedMonth || new Date(new Date().setDate(1))} // Start with the first of the month
                         initialFocus
-                        components={{
-                            Day: ({ ...props }) => <div className="day-cell hidden">{/* Hide days */}</div>,
-                            // To effectively hide days, we need to control rendering more directly or use a month-only picker library
-                            // For now, this setup allows month/year navigation but still shows days.
-                            // A true month picker would involve custom calendar component.
-                        }}
-                        // Quick hack to make days less prominent, not a real solution for month-only picker
-                        modifiersClassNames={{
-                            day: 'opacity-0 pointer-events-none', 
-                            selected: 'opacity-100 pointer-events-auto', // still show selected day if any
-                        }}
-                        className="[&_td]:hidden [&_th]:hidden [&_.rdp-day_selected]:opacity-0" // try to hide days via CSS for simplicity
-                                                                                               // A more robust solution would be a dedicated month picker component
                      />
                     </PopoverContent>
                 </Popover>
