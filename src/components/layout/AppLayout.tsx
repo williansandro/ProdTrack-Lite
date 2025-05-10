@@ -1,24 +1,30 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import {
-  SidebarProvider,
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarInset,
-  SidebarTrigger,
-} from '@/components/ui/sidebar';
+  LayoutDashboard,
+  Package,
+  ClipboardList,
+  Target,
+  Settings,
+  UserCircle,
+  Menu as MenuIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { LayoutDashboard, Package, ClipboardList, Target, Settings, UserCircle } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Logo } from '@/components/icons/Logo';
 import { cn } from '@/lib/utils';
 
@@ -34,10 +40,9 @@ const navItems = [
 ];
 
 function UserNav() {
-  // Placeholder for user authentication state
-  const isLoggedIn = true; 
-  const userName = "Nome do Usuário"; // Example, replace with actual data or keep as "User Name" if dynamic
-  const userEmail = "usuario@exemplo.com"; // Example
+  const isLoggedIn = true;
+  const userName = "Nome do Usuário";
+  const userEmail = "usuario@exemplo.com";
 
   if (!isLoggedIn) {
     return (
@@ -52,7 +57,7 @@ function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-9 w-9 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src="https://picsum.photos/40/40" alt="@shadcn" data-ai-hint="user avatar" />
+            <AvatarImage src="https://picsum.photos/40/40" alt="Avatar do usuário" data-ai-hint="user avatar" />
             <AvatarFallback>
               {userName ? userName.split(' ').map(n => n[0]).join('').toUpperCase() : <UserCircle className="h-5 w-5" />}
             </AvatarFallback>
@@ -82,74 +87,117 @@ function UserNav() {
   );
 }
 
-
 export function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <SidebarProvider>
-      <Sidebar collapsible="icon" className="border-r">
-        <SidebarHeader className="p-3 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden" aria-label="Voltar para o Painel de Controle">
-            <Logo className="w-7 h-7 text-primary flex-shrink-0" />
-            <h1 className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden whitespace-nowrap">ProdTrack Lite</h1>
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-16 items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-2" aria-label="Voltar para o Painel de Controle">
+            <Logo className="h-7 w-7 text-primary" />
+            <span className="text-lg font-semibold text-foreground">ProdTrack Lite</span>
           </Link>
-          <div className="group-data-[collapsible=icon]:hidden">
-             {/* This trigger is managed internally by Sidebar component for collapsing */}
-          </div>
-        </SidebarHeader>
-        <SidebarContent className="p-2">
-          <SidebarMenu>
-            {navItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
-                  tooltip={{ children: item.label, side: 'right', className: 'bg-sidebar-accent text-sidebar-accent-foreground' }}
-                  className={cn(
-                    "justify-start",
-                    (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) && "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground"
-                  )}
-                >
-                  <Link href={item.href}>
-                    <item.icon className="h-5 w-5" />
-                    <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter className="p-3">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                asChild 
-                tooltip={{ children: "Configurações", side: 'right', className: 'bg-sidebar-accent text-sidebar-accent-foreground' }}
-                className="justify-start"
-              >
-                <Link href="#">
-                  <Settings className="h-5 w-5" />
-                  <span className="group-data-[collapsible=icon]:hidden">Configurações</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
 
-      <SidebarInset>
-        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-background/80 backdrop-blur-sm border-b md:px-6">
-          <div className="md:hidden">
-            <SidebarTrigger aria-label="Alternar Barra Lateral"/>
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center space-x-1">
+            {navItems.map((item) => (
+              <Button
+                key={item.href}
+                variant="ghost"
+                asChild
+                className={cn(
+                  "px-3 py-2 text-sm font-medium",
+                  (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                )}
+              >
+                <Link href={item.href}>
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.label}
+                </Link>
+              </Button>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-2">
+            <UserNav />
+            {/* Mobile Navigation Trigger */}
+            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+              <SheetTrigger asChild className="md:hidden">
+                <Button variant="ghost" size="icon">
+                  <MenuIcon className="h-6 w-6" />
+                  <span className="sr-only">Abrir menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-full max-w-xs sm:max-w-sm p-0">
+                <div className="flex h-full flex-col">
+                  <div className="flex items-center justify-between border-b p-4">
+                     <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
+                        <Logo className="h-7 w-7 text-primary" />
+                        <span className="text-lg font-semibold">ProdTrack Lite</span>
+                    </Link>
+                    <SheetClose asChild>
+                         <Button variant="ghost" size="icon" className="md:hidden">
+                            <MenuIcon className="h-6 w-6 rotate-90" /> {/* Or X icon */}
+                            <span className="sr-only">Fechar menu</span>
+                        </Button>
+                    </SheetClose>
+                  </div>
+                  <nav className="flex-grow p-4 space-y-2">
+                    {navItems.map((item) => (
+                      <Button
+                        key={item.href}
+                        variant={ (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) ? "secondary" : "ghost" }
+                        asChild
+                        className={cn(
+                          "w-full justify-start text-base",
+                           (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))
+                            ? "font-semibold"
+                            : "text-muted-foreground"
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <Link href={item.href}>
+                          <item.icon className="mr-3 h-5 w-5" />
+                          {item.label}
+                        </Link>
+                      </Button>
+                    ))}
+                     <div className="border-t pt-4 mt-4">
+                        <Button
+                            variant="ghost"
+                            asChild
+                            className="w-full justify-start text-base text-muted-foreground"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            <Link href="#">
+                              <Settings className="mr-3 h-5 w-5" />
+                              Configurações
+                            </Link>
+                          </Button>
+                     </div>
+                  </nav>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
-          <div className="flex-1" /> {/* Spacer */}
-          <UserNav />
-        </header>
-        <main className="flex-1 p-4 md:p-6 lg:p-8 bg-secondary/50 min-h-[calc(100vh-4rem)]">
-          {children}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+        </div>
+      </header>
+      <main className="flex-1 container py-6 md:py-8 lg:py-10 bg-secondary/30">
+        {children}
+      </main>
+       <footer className="py-6 md:px-8 md:py-0 border-t bg-background">
+        <div className="container flex flex-col items-center justify-between gap-4 md:h-20 md:flex-row">
+          <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
+            © {new Date().getFullYear()} ProdTrack Lite. Todos os direitos reservados.
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 }
+
+    

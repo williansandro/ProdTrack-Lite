@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -43,16 +44,6 @@ body {
     --chart-5: 180 100% 40%;
 
     --radius: 0.5rem;
-
-    /* Sidebar specific theme */
-    --sidebar-background: 210 30% 18%; /* Darker muted blue/gray */
-    --sidebar-foreground: 210 30% 90%; /* Light text for sidebar */
-    --sidebar-primary: 180 100% 30%; /* Teal, slightly brighter for primary actions in sidebar */
-    --sidebar-primary-foreground: 180 100% 95%;
-    --sidebar-accent: 210 30% 25%; /* Slightly lighter than sidebar bg for hover */
-    --sidebar-accent-foreground: 210 30% 95%;
-    --sidebar-border: 210 30% 22%;
-    --sidebar-ring: 180 100% 35%;
   }
 
   .dark {
@@ -89,16 +80,6 @@ body {
     --chart-3: 220 40% 50%;
     --chart-4: 207 44% 30%;
     --chart-5: 180 100% 20%;
-    
-    /* Dark Sidebar specific theme */
-    --sidebar-background: 220 30% 8%; 
-    --sidebar-foreground: 220 30% 85%; 
-    --sidebar-primary: 180 100% 40%; 
-    --sidebar-primary-foreground: 180 100% 5%;
-    --sidebar-accent: 220 30% 12%; 
-    --sidebar-accent-foreground: 220 30% 90%;
-    --sidebar-border: 220 30% 15%;
-    --sidebar-ring: 180 100% 45%;
   }
 }
 
@@ -110,4 +91,7 @@ body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1; /* Enable common ligatures and contextual alternates */
   }
+  .container { @apply max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8; }
 }
+
+    
