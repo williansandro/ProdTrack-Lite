@@ -9,7 +9,7 @@ interface DataStore {
 // Helper to generate unique IDs
 export const generateId = (prefix: string = 'id') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
 
-function initializeDb(): DataStore {
+function createInitialDataStore(): DataStore {
   return {
     skus: [
       { id: 'sku-1', code: 'PNL-001', description: 'Painel Solar Standard X', createdAt: new Date(2023, 0, 10), updatedAt: new Date(2023, 0, 10) },
@@ -159,11 +159,17 @@ let db: DataStore;
 const g = globalThis as typeof globalThis & { __db__?: DataStore };
 
 if (process.env.NODE_ENV === 'production') {
-  db = initializeDb();
+  // In production, always initialize with fresh data.
+  // For a real app, this would connect to a persistent database.
+  db = createInitialDataStore();
 } else {
-  // In development, use a global variable to preserve the database across HMR
+  // In development, use a global variable to preserve the database across HMR.
+  // Seed data only if the global store doesn't exist yet.
   if (!g.__db__) {
-    g.__db__ = initializeDb();
+    console.log('Development: Initializing in-memory database with seed data.');
+    g.__db__ = createInitialDataStore();
+  } else {
+    // console.log('Development: Re-using existing in-memory database.');
   }
   db = g.__db__;
 }
