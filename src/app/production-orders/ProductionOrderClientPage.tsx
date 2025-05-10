@@ -36,8 +36,8 @@ import {
   completeProductionOrder,
   cancelProductionOrder
 } from '@/lib/actions/production-order.actions';
-import { format, differenceInSeconds } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { differenceInSeconds } from 'date-fns';
+import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
 
 interface ProductionOrderClientPageProps {
   initialProductionOrders: ProductionOrder[];
@@ -69,15 +69,14 @@ const statusMap: Record<ProductionOrderStatus, { label: string; variant: "defaul
 
 
 function TimerCell({ order }: { order: ProductionOrder }) {
-  const [elapsedTime, setElapsedTime] = useState<number | undefined>(
-    order.status === 'in_progress' && order.startTime
-      ? differenceInSeconds(new Date(), new Date(order.startTime)) * 1000
-      : order.totalProductionTime
-  );
+  const [elapsedTime, setElapsedTime] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
     if (order.status === 'in_progress' && order.startTime) {
+      // Set initial elapsed time immediately
+      setElapsedTime(differenceInSeconds(new Date(), new Date(order.startTime)) * 1000);
+      // Then update every second
       intervalId = setInterval(() => {
         setElapsedTime(differenceInSeconds(new Date(), new Date(order.startTime!)) * 1000);
       }, 1000);
@@ -86,6 +85,10 @@ function TimerCell({ order }: { order: ProductionOrder }) {
     }
     return () => clearInterval(intervalId);
   }, [order.status, order.startTime, order.totalProductionTime]);
+  
+  if (elapsedTime === undefined && order.status === 'in_progress') {
+    return <Badge variant="outline" className="text-muted-foreground">Calculando...</Badge>;
+  }
 
   if (order.status === 'open') return <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>;
   return <div className="tabular-nums">{formatDuration(elapsedTime)}</div>;
@@ -167,7 +170,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     {
       accessorKey: "createdAt",
       header: "Criado Em",
-      cell: ({ row }) => format(new Date(row.original.createdAt), "dd MMM yyyy, HH:mm", { locale: ptBR }),
+      cell: ({ row }) => <FormattedDateCell dateValue={row.original.createdAt} />,
     },
      {
       accessorKey: "notes",
@@ -224,7 +227,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
         );
       },
     },
-  ], [skus]);
+  ], [skus]); // removed toast from dependencies as it's stable
 
   const getAlertDialogTexts = () => {
     if (!confirmActionOrder) return { title: '', description: '', actionText: '' };
@@ -316,4 +319,3 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     </div>
   );
 }
-

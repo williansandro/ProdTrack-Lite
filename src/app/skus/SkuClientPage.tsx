@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { SKU } from '@/lib/types';
@@ -28,15 +29,15 @@ import { PlusCircle, Edit3, Trash2, MoreHorizontal } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { deleteSku } from '@/lib/actions/sku.actions';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
+
 
 interface SkuClientPageProps {
   initialSkus: SKU[];
 }
 
 export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
-  const [skus, setSkus] = useState<SKU[]>(initialSkus);
+  const [skus, setSkus] = useState<SKU[]>(initialSkus); // This local state might not be needed if server actions handle revalidation properly
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSku, setEditingSku] = useState<SKU | null>(null);
   const [deletingSku, setDeletingSku] = useState<SKU | null>(null);
@@ -45,7 +46,7 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
   const handleFormSubmit = () => {
     setIsFormOpen(false);
     setEditingSku(null);
-    // Data will be refreshed by server action revalidation
+    // Data will be refreshed by server action revalidation, so local 'skus' state might not be strictly necessary to update manually
   };
 
   const openEditForm = (sku: SKU) => {
@@ -64,7 +65,7 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
         toast({ title: 'Erro', description: result.message, variant: 'destructive' });
     } else {
         toast({ title: 'Sucesso', description: result.message });
-        setSkus(prev => prev.filter(s => s.id !== deletingSku.id)); // Optimistic update
+        // No need for optimistic update if revalidatePath works as expected: setSkus(prev => prev.filter(s => s.id !== deletingSku.id));
     }
     setDeletingSku(null);
   };
@@ -82,12 +83,12 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
     {
       accessorKey: "createdAt",
       header: "Criado Em",
-      cell: ({ row }) => format(new Date(row.original.createdAt), "dd MMM yyyy, HH:mm", { locale: ptBR }),
+      cell: ({ row }) => <FormattedDateCell dateValue={row.original.createdAt} />,
     },
     {
       accessorKey: "updatedAt",
       header: "Atualizado Em",
-      cell: ({ row }) => format(new Date(row.original.updatedAt), "dd MMM yyyy, HH:mm", { locale: ptBR }),
+      cell: ({ row }) => <FormattedDateCell dateValue={row.original.updatedAt} />,
     },
     {
       id: "actions",
