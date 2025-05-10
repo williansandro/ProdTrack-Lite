@@ -12,8 +12,6 @@ import {
   ColumnFiltersState,
   getFilteredRowModel,
   RowSelectionState,
-  getFilteredSelectedRowModel,
-  getPreSelectedRowModel,
 
 } from "@tanstack/react-table";
 
@@ -95,12 +93,10 @@ export function DataTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
-    ...(enableRowSelection && onRowSelectionChange && {
+    ...(enableRowSelection && onRowSelectionChange && getId && { // Ensure getId is also present for row selection
         enableRowSelection: true,
         onRowSelectionChange: onRowSelectionChange,
         getRowId: getId, // Important for row selection persistence
-        getFilteredSelectedRowModel: getFilteredSelectedRowModel(),
-        getPreSelectedRowModel: getPreSelectedRowModel(),
     }),
     state: {
       sorting,
@@ -179,7 +175,7 @@ export function DataTable<TData, TValue>({
             {table.getFilteredRowModel().rows.length} linha(s) selecionada(s).
           </div>
         )}
-        <div className="flex items-center space-x-2">
+        <div className="ml-auto flex items-center space-x-2">
            <Button
             variant="outline"
             size="sm"
@@ -201,3 +197,4 @@ export function DataTable<TData, TValue>({
     </div>
   );
 }
+
