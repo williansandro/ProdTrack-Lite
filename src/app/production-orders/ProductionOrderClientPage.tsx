@@ -40,6 +40,7 @@ import {
 } from '@/lib/actions/production-order.actions';
 import { differenceInSeconds } from 'date-fns';
 import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
+import { Progress } from '@/components/ui/progress'; // Import Progress component
 
 interface ProductionOrderClientPageProps {
   initialProductionOrders: ProductionOrder[];
@@ -95,8 +96,11 @@ function TimerCell({ order }: { order: ProductionOrder }) {
     return <Badge variant="outline" className="text-muted-foreground">Calculando...</Badge>;
   }
 
-  if (order.status === 'open' || (order.status !== 'in_progress' && elapsedTime === undefined)) {
+  if (order.status === 'open' || (order.status !== 'in_progress' && elapsedTime === undefined && order.status !== 'completed' && order.status !== 'cancelled')) {
     return <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>;
+  }
+   if (elapsedTime === undefined && (order.status === 'completed' || order.status === 'cancelled')) {
+    return <Badge variant="outline" className="text-muted-foreground">N/D</Badge>;
   }
   
   return <div className="tabular-nums">{formatDuration(elapsedTime)}</div>;
@@ -158,7 +162,6 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     } catch (e: any) {
         toast({ title: 'Erro Inesperado', description: e.message || 'Ocorreu um erro.', variant: 'destructive' });
     } finally {
-        // Only close dialog if action was successful or a non-validation error occurred
         const isCompleteAction = action === 'complete';
         const hasValidationError = isCompleteAction && (isNaN(parseInt(deliveredQuantity, 10)) || parseInt(deliveredQuantity, 10) < 0 || !Number.isInteger(parseFloat(deliveredQuantity)));
         const hasServerError = result?.error;
@@ -166,7 +169,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
         if (!(isCompleteAction && (hasValidationError || hasServerError))) {
            setConfirmActionOrder(null);
         }
-        if (isCompleteAction && hasServerError && !hasValidationError) { // Close on server error if not a client validation error for quantity
+        if (isCompleteAction && hasServerError && !hasValidationError) { 
             setConfirmActionOrder(null);
         }
     }
@@ -187,13 +190,30 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
       header: "Quantidade",
       cell: ({ row }) => {
         const order = row.original;
-        if (order.status === 'completed' && typeof order.deliveredQuantity === 'number') {
+        if (order.status === 'completed' && typeof order.deliveredQuantity === 'number' && order.quantity > 0) {
+          const percentage = Math.min(100, Math.max(0, (order.deliveredQuantity / order.quantity) * 100));
+          let progressColorClass = 'bg-green-500'; // Default to green
+          if (percentage <= 33) {
+            progressColorClass = 'bg-red-500'; // Use Tailwind red for destructive/low progress
+          } else if (percentage <= 66) {
+            progressColorClass = 'bg-yellow-500'; // Use Tailwind yellow for medium progress
+          }
+          
           return (
-            <div className="flex flex-col">
-              <span>{order.deliveredQuantity} <span className="text-xs text-muted-foreground">entregues</span></span>
+            <div className="flex flex-col space-y-1 w-40">
+              <span>{order.deliveredQuantity} <span className="text-xs text-muted-foreground">entregues</span> ({percentage.toFixed(0)}%)</span>
+              <Progress value={percentage} indicatorClassName={progressColorClass} className="h-2"/>
               <span className="text-xs text-muted-foreground">({order.quantity} planejadas)</span>
             </div>
           );
+        }
+         if (order.status === 'completed' && typeof order.deliveredQuantity === 'number' && order.quantity === 0) {
+            return (
+                 <div className="flex flex-col">
+                    <span>{order.deliveredQuantity} <span className="text-xs text-muted-foreground">entregues</span></span>
+                     <span className="text-xs text-muted-foreground">(0 planejadas - N/A %)</span>
+                </div>
+            );
         }
         return order.quantity;
       }
@@ -396,4 +416,3 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     </div>
   );
 }
-
