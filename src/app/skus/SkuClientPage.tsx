@@ -2,7 +2,7 @@
 "use client";
 
 import type { SKU } from '@/lib/types';
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,10 +25,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SkuForm } from '@/components/skus/SkuForm';
 import { DataTable } from '@/components/shared/DataTable';
-import { PlusCircle, Edit3, Trash2, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, MoreHorizontal, Trash } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { deleteSku } from '@/lib/actions/sku.actions';
+import { deleteSku, deleteMultipleSkus } from '@/lib/actions/sku.actions';
 import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
 
 
@@ -37,16 +37,17 @@ interface SkuClientPageProps {
 }
 
 export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
-  const [skus, setSkus] = useState<SKU[]>(initialSkus); // This local state might not be needed if server actions handle revalidation properly
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSku, setEditingSku] = useState<SKU | null>(null);
   const [deletingSku, setDeletingSku] = useState<SKU | null>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+
   const { toast } = useToast();
 
   const handleFormSubmit = () => {
     setIsFormOpen(false);
     setEditingSku(null);
-    // Data will be refreshed by server action revalidation, so local 'skus' state might not be strictly necessary to update manually
   };
 
   const openEditForm = (sku: SKU) => {
@@ -65,9 +66,27 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
         toast({ title: 'Erro', description: result.message, variant: 'destructive' });
     } else {
         toast({ title: 'Sucesso', description: result.message });
-        // No need for optimistic update if revalidatePath works as expected: setSkus(prev => prev.filter(s => s.id !== deletingSku.id));
     }
     setDeletingSku(null);
+  };
+
+  const selectedSkuIds = useMemo(() => {
+    return Object.keys(rowSelection).filter(key => rowSelection[key]);
+  }, [rowSelection]);
+  
+  const handleBulkDelete = async () => {
+    if (selectedSkuIds.length === 0) {
+      toast({ title: 'Nenhum SKU selecionado', description: 'Selecione SKUs para excluir.', variant: 'destructive' });
+      return;
+    }
+    const result = await deleteMultipleSkus(selectedSkuIds);
+    if (result.error) {
+      toast({ title: 'Erro na Exclusão em Massa', description: result.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Sucesso', description: result.message });
+      setRowSelection({}); // Clear selection
+    }
+    setIsBulkDeleteConfirmOpen(false);
   };
   
   const columns: ColumnDef<SKU>[] = useMemo(() => [
@@ -142,11 +161,28 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
         </Dialog>
       </div>
 
+      {selectedSkuIds.length > 0 && (
+        <div className="flex items-center justify-start space-x-2 my-4">
+          <Button
+            variant="destructive"
+            onClick={() => setIsBulkDeleteConfirmOpen(true)}
+            disabled={selectedSkuIds.length === 0}
+          >
+            <Trash className="mr-2 h-4 w-4" />
+            Excluir {selectedSkuIds.length} SKU(s) Selecionado(s)
+          </Button>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
-        data={initialSkus} // Use initialSkus from props, server actions handle revalidation
+        data={initialSkus}
         filterColumn="code"
         filterPlaceholder="Filtrar por código..."
+        enableRowSelection={true}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        getId={(row) => row.id}
       />
 
       {deletingSku && (
@@ -155,13 +191,32 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
             <AlertDialogHeader>
               <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta ação não pode ser desfeita. Isso excluirá permanentemente o SKU: <strong>{deletingSku.code}</strong>.
+                Esta ação não pode ser desfeita. Isso excluirá permanentemente o SKU: <strong>{deletingSku.code}</strong>. SKUs em uso em Pedidos de Produção ou Demandas não podem ser excluídos.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setDeletingSku(null)}>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                 Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {isBulkDeleteConfirmOpen && (
+        <AlertDialog open={isBulkDeleteConfirmOpen} onOpenChange={setIsBulkDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
+              <AlertDialogDescription>
+                Você tem certeza que deseja excluir os <strong>{selectedSkuIds.length}</strong> SKU(s) selecionado(s)? Esta ação não pode ser desfeita. SKUs em uso em Pedidos de Produção ou Demandas não serão excluídos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                Excluir Selecionados
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
