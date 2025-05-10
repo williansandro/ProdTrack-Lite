@@ -1,18 +1,20 @@
+
 "use client";
 
 import type { ChartConfig } from "@/components/ui/chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { Bar, Pie, PieChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, BarChart as RechartsBarChart } from "recharts";
+import { Bar, Pie, PieChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, BarChart as RechartsBarChart, Cell } from "recharts";
 
 interface ProductionStatusDataItem {
-  status: string;
+  status: string; // This will be the label e.g. "Abertos"
+  key: string; // This will be the key e.g. "open"
   count: number;
-  fill: string;
+  fill: string; // This should be the HSL color string from chartConfig
 }
 
 interface MonthlyProductionDataItem {
-  month: string;
+  month: string; // e.g., "Jan", "Fev"
   produced: number;
   target: number;
 }
@@ -41,17 +43,19 @@ export function DashboardClientContent({
           <ChartContainer config={chartConfigProductionStatus} className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <ChartTooltip content={<ChartTooltipContent hideLabel nameKey="status" />} />
                 <Pie
                   data={productionStatusData}
                   dataKey="count"
-                  nameKey="status"
+                  nameKey="status" // Uses the 'status' field (e.g., "Abertos") for legend and tooltip name
                   cx="50%"
                   cy="50%"
                   outerRadius={100}
                   labelLine={false}
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
                     const RADIAN = Math.PI / 180;
+                    // only show label if percent is > 5% to avoid clutter
+                    if (percent * 100 < 5) return null; 
                     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
                     const x = cx + radius * Math.cos(-midAngle * RADIAN);
                     const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -61,8 +65,12 @@ export function DashboardClientContent({
                       </text>
                     );
                   }}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
+                >
+                  {productionStatusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} name={entry.status}/>
+                  ))}
+                </Pie>
+                <ChartLegend content={<ChartLegendContent nameKey="status" />} />
               </PieChart>
             </ResponsiveContainer>
           </ChartContainer>
@@ -79,7 +87,9 @@ export function DashboardClientContent({
             <ResponsiveContainer width="100%" height="100%">
               <RechartsBarChart data={monthlyProductionData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                 <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                <YAxis tickLine={false} axisLine={false} fontSize={12} 
+                  tickFormatter={(value) => value > 0 ? value.toLocaleString('pt-BR') : ''}
+                />
                 <ChartTooltip
                   cursor={false}
                   content={<ChartTooltipContent indicator="dashed" />}
