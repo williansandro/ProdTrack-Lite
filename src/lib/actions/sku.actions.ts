@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -51,6 +52,8 @@ export async function createSku(formData: SkuFormData) {
   db.skus.unshift(newSku); // Add to the beginning of the array
 
   revalidatePath('/skus');
+  revalidatePath('/production-orders');
+  revalidatePath('/demand-planning');
   return { message: 'SKU criado com sucesso.', sku: newSku };
 }
 
@@ -88,7 +91,10 @@ export async function updateSku(id: string, formData: SkuFormData) {
   };
 
   revalidatePath('/skus');
-  revalidatePath(`/skus/${id}/edit`); // If there's an edit page
+  revalidatePath('/production-orders');
+  revalidatePath('/demand-planning');
+  // Assuming there isn't a specific edit page that needs revalidation beyond the main /skus page.
+  // If there was a route like /skus/[id]/edit, it would be: revalidatePath(`/skus/${id}/edit`);
   return { message: 'SKU atualizado com sucesso.', sku: db.skus[skuIndex] };
 }
 
@@ -111,5 +117,8 @@ export async function deleteSku(id: string) {
   db.skus.splice(skuIndex, 1);
 
   revalidatePath('/skus');
+  revalidatePath('/production-orders');
+  revalidatePath('/demand-planning');
   return { message: 'SKU excluído com sucesso.' };
 }
+
