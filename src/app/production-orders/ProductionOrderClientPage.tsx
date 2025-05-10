@@ -3,7 +3,7 @@
 
 import type { ProductionOrder, SKU, ProductionOrderStatus } from '@/lib/types';
 import type { ColumnDef } from "@tanstack/react-table";
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -24,6 +24,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { DataTable } from '@/components/shared/DataTable';
 import { ProductionOrderForm } from '@/components/production-orders/ProductionOrderForm';
 import { Badge } from '@/components/ui/badge';
@@ -74,9 +76,7 @@ function TimerCell({ order }: { order: ProductionOrder }) {
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
     if (order.status === 'in_progress' && order.startTime) {
-      // Set initial elapsed time immediately
       setElapsedTime(differenceInSeconds(new Date(), new Date(order.startTime)) * 1000);
-      // Then update every second
       intervalId = setInterval(() => {
         setElapsedTime(differenceInSeconds(new Date(), new Date(order.startTime!)) * 1000);
       }, 1000);
@@ -99,6 +99,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<ProductionOrder | null>(null);
   const [confirmActionOrder, setConfirmActionOrder] = useState<{ order: ProductionOrder; action: 'delete' | 'start' | 'complete' | 'cancel' } | null>(null);
+  const [deliveredQuantity, setDeliveredQuantity] = useState<string>('');
   const { toast } = useToast();
 
   const handleFormSubmit = () => {
@@ -112,6 +113,14 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     setIsFormOpen(true);
   };
 
+  const openConfirmDialog = (order: ProductionOrder, action: 'delete' | 'start' | 'complete' | 'cancel') => {
+    if (action === 'complete') {
+      setDeliveredQuantity(order.quantity.toString()); // Pre-fill with planned quantity
+    }
+    setConfirmActionOrder({ order, action });
+  };
+
+
   const handleAction = async () => {
     if (!confirmActionOrder) return;
     const { order, action } = confirmActionOrder;
@@ -123,7 +132,12 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
       } else if (action === 'start') {
         result = await startProductionOrder(order.id);
       } else if (action === 'complete') {
-        result = await completeProductionOrder(order.id);
+        const qty = parseInt(deliveredQuantity, 10);
+        if (isNaN(qty) || qty < 0) {
+          toast({ title: 'Erro de Validação', description: 'Quantidade entregue deve ser um número não negativo.', variant: 'destructive' });
+          return; // Do not close dialog, let user correct
+        }
+        result = await completeProductionOrder(order.id, qty);
       } else if (action === 'cancel') {
         result = await cancelProductionOrder(order.id);
       }
@@ -136,7 +150,10 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     } catch (e: any) {
         toast({ title: 'Erro Inesperado', description: e.message || 'Ocorreu um erro.', variant: 'destructive' });
     } finally {
-        setConfirmActionOrder(null);
+        // Only close dialog if action was successful or a non-validation error occurred
+        if (!(action === 'complete' && (result?.error || (isNaN(parseInt(deliveredQuantity, 10)) || parseInt(deliveredQuantity, 10) < 0 ) ))) {
+           setConfirmActionOrder(null);
+        }
     }
   };
   
@@ -153,6 +170,18 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     {
       accessorKey: "quantity",
       header: "Quantidade",
+      cell: ({ row }) => {
+        const order = row.original;
+        if (order.status === 'completed' && typeof order.deliveredQuantity === 'number') {
+          return (
+            <div className="flex flex-col">
+              <span>{order.deliveredQuantity} <span className="text-xs text-muted-foreground">entregues</span></span>
+              <span className="text-xs text-muted-foreground">({order.quantity} planejadas)</span>
+            </div>
+          );
+        }
+        return order.quantity;
+      }
     },
     {
       accessorKey: "status",
@@ -192,31 +221,31 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Ações</DropdownMenuLabel>
               {order.status === 'open' && (
-                <DropdownMenuItem onClick={() => setConfirmActionOrder({ order, action: 'start' })}>
+                <DropdownMenuItem onClick={() => openConfirmDialog(order, 'start')}>
                   <Play className="mr-2 h-4 w-4" />
                   Iniciar Produção
                 </DropdownMenuItem>
               )}
               {order.status === 'in_progress' && (
-                <DropdownMenuItem onClick={() => setConfirmActionOrder({ order, action: 'complete' })}>
+                <DropdownMenuItem onClick={() => openConfirmDialog(order, 'complete')}>
                   <CheckCircle className="mr-2 h-4 w-4" />
                   Concluir Produção
                 </DropdownMenuItem>
               )}
-               <DropdownMenuItem onClick={() => openEditForm(order)}>
+               <DropdownMenuItem onClick={() => openEditForm(order)} disabled={order.status === 'cancelled' || order.status === 'completed'}>
                 <Edit3 className="mr-2 h-4 w-4" />
                 Editar / Ver Detalhes
               </DropdownMenuItem>
               {(order.status === 'open' || order.status === 'in_progress') && (
-                <DropdownMenuItem onClick={() => setConfirmActionOrder({ order, action: 'cancel' })} className="text-amber-600 focus:text-amber-700 focus:bg-amber-100">
+                <DropdownMenuItem onClick={() => openConfirmDialog(order, 'cancel')} className="text-amber-600 focus:text-amber-700 focus:bg-amber-100">
                   <XCircle className="mr-2 h-4 w-4" />
                   Cancelar Produção
                 </DropdownMenuItem>
               )}
-              { (order.status === 'open' || order.status === 'cancelled' || order.status === 'completed') && ( // Permitir exclusão para aberta, cancelada ou concluída
+              { (order.status !== 'in_progress') && ( 
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setConfirmActionOrder({ order, action: 'delete' })} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                  <DropdownMenuItem onClick={() => openConfirmDialog(order, 'delete')} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                     <Trash2 className="mr-2 h-4 w-4" />
                     Excluir
                   </DropdownMenuItem>
@@ -238,7 +267,11 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
       case 'start':
         return { title: 'Iniciar Produção?', description: `Você está prestes a iniciar a produção para o SKU: ${order.skuCode} (ID: ${order.id}). O cronômetro será iniciado.`, actionText: 'Iniciar' };
       case 'complete':
-        return { title: 'Concluir Produção?', description: `Você está prestes a concluir a produção para o SKU: ${order.skuCode} (ID: ${order.id}). O tempo de produção será registrado.`, actionText: 'Concluir' };
+        return { 
+          title: 'Concluir Produção?', 
+          description: `Confirme a quantidade efetivamente produzida e entregue para o SKU: ${order.skuCode} (ID: ${order.id}). A quantidade planejada originalmente foi ${order.quantity}.`, 
+          actionText: 'Confirmar Conclusão' 
+        };
       case 'cancel':
         return { title: 'Cancelar Produção?', description: `Você está prestes a cancelar a produção para o SKU: ${order.skuCode} (ID: ${order.id}). Esta ação não pode ser desfeita facilmente.`, actionText: 'Cancelar OP', actionVariant: 'destructive' as const };
       default:
@@ -268,6 +301,12 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
                     <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700 flex items-start">
                         <Info className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
                         <span>Pedidos com status diferente de "Aberta" têm campos limitados para edição (apenas Observações).</span>
+                    </div>
+                 )}
+                 {editingOrder && (order.status === 'completed' || order.status === 'cancelled') && (
+                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700 flex items-start">
+                        <Info className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                        <span>Este pedido está {statusMap[editingOrder.status].label.toLowerCase()} e não pode mais ser editado. Apenas visualização.</span>
                     </div>
                  )}
               </DialogDescription>
@@ -304,6 +343,21 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
                 {dialogTexts.description}
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {confirmActionOrder.action === 'complete' && (
+              <div className="space-y-2 my-2">
+                <Label htmlFor="deliveredQuantityInput" className="text-sm font-medium">Quantidade Entregue</Label>
+                <Input
+                  id="deliveredQuantityInput"
+                  type="number"
+                  value={deliveredQuantity}
+                  onChange={(e) => setDeliveredQuantity(e.target.value)}
+                  placeholder={`Planejado: ${confirmActionOrder.order.quantity}`}
+                  className="mt-1"
+                />
+                 { parseInt(deliveredQuantity, 10) < 0 && <p className="text-sm text-destructive">Quantidade não pode ser negativa.</p>}
+                 { !Number.isInteger(parseFloat(deliveredQuantity)) && deliveredQuantity !== '' && <p className="text-sm text-destructive">Quantidade deve ser um número inteiro.</p>}
+              </div>
+            )}
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setConfirmActionOrder(null)}>Voltar</AlertDialogCancel>
               <AlertDialogAction 

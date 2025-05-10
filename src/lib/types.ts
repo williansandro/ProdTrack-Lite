@@ -18,6 +18,7 @@ export interface ProductionOrder {
   startTime?: number; // Timestamp (Date.now())
   endTime?: number; // Timestamp (Date.now())
   totalProductionTime?: number; // in milliseconds
+  deliveredQuantity?: number; // Actual quantity delivered upon completion
   notes?: string;
   createdAt: Date;
   updatedAt: Date;

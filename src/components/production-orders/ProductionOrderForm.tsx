@@ -67,9 +67,20 @@ export function ProductionOrderForm({ productionOrder, skus, onFormSubmit }: Pro
 
   const isEditMode = !!productionOrder;
   const isOrderNotOpen = isEditMode && productionOrder?.status !== 'open';
+  const isOrderTerminal = isEditMode && (productionOrder?.status === 'completed' || productionOrder?.status === 'cancelled');
 
 
   async function onSubmit(data: ProductionOrderFormData) {
+    if (isOrderTerminal) {
+        toast({
+            title: 'Aviso',
+            description: 'Pedidos concluídos ou cancelados não podem ser alterados.',
+            variant: 'default',
+        });
+        onFormSubmit();
+        return;
+    }
+
     try {
       let result;
       const payload = {
@@ -129,7 +140,7 @@ export function ProductionOrderForm({ productionOrder, skus, onFormSubmit }: Pro
               <Select 
                 onValueChange={field.onChange} 
                 defaultValue={field.value}
-                disabled={isOrderNotOpen || form.formState.isSubmitting}
+                disabled={isOrderNotOpen || form.formState.isSubmitting || isOrderTerminal}
               >
                 <FormControl>
                   <SelectTrigger>
@@ -145,7 +156,7 @@ export function ProductionOrderForm({ productionOrder, skus, onFormSubmit }: Pro
                   {skus.length === 0 && <SelectItem value="" disabled>Nenhum SKU disponível</SelectItem>}
                 </SelectContent>
               </Select>
-              {isOrderNotOpen && <p className="text-sm text-muted-foreground">SKU não pode ser alterado para pedidos já iniciados.</p>}
+              {isOrderNotOpen && !isOrderTerminal && <p className="text-sm text-muted-foreground">SKU não pode ser alterado para pedidos já iniciados.</p>}
               <FormMessage />
             </FormItem>
           )}
@@ -160,11 +171,11 @@ export function ProductionOrderForm({ productionOrder, skus, onFormSubmit }: Pro
                 <Input 
                   type="number" 
                   placeholder="ex: 100" {...field} 
-                  disabled={isOrderNotOpen || form.formState.isSubmitting}
+                  disabled={isOrderNotOpen || form.formState.isSubmitting || isOrderTerminal}
                   onChange={e => field.onChange(e.target.value)}
                 />
               </FormControl>
-              {isOrderNotOpen && <p className="text-sm text-muted-foreground">Quantidade não pode ser alterada para pedidos já iniciados.</p>}
+              {isOrderNotOpen && !isOrderTerminal && <p className="text-sm text-muted-foreground">Quantidade não pode ser alterada para pedidos já iniciados.</p>}
               <FormMessage />
             </FormItem>
           )}
@@ -176,7 +187,7 @@ export function ProductionOrderForm({ productionOrder, skus, onFormSubmit }: Pro
             <FormItem>
               <FormLabel>Observações (Opcional)</FormLabel>
               <FormControl>
-                <Textarea placeholder="Detalhes adicionais sobre o pedido" {...field} className="min-h-[100px]" disabled={form.formState.isSubmitting} />
+                <Textarea placeholder="Detalhes adicionais sobre o pedido" {...field} className="min-h-[100px]" disabled={form.formState.isSubmitting || isOrderTerminal} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -184,11 +195,13 @@ export function ProductionOrderForm({ productionOrder, skus, onFormSubmit }: Pro
         />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onFormSubmit} disabled={form.formState.isSubmitting}>
-            Cancelar
+            {isOrderTerminal ? 'Fechar' : 'Cancelar'}
           </Button>
-          <Button type="submit" disabled={form.formState.isSubmitting || (skus.length === 0 && !isEditMode) }>
-            {form.formState.isSubmitting ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Criar Pedido')}
-          </Button>
+          {!isOrderTerminal && (
+            <Button type="submit" disabled={form.formState.isSubmitting || (skus.length === 0 && !isEditMode) }>
+              {form.formState.isSubmitting ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Criar Pedido')}
+            </Button>
+          )}
         </div>
       </form>
     </Form>

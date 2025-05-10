@@ -138,7 +138,7 @@ export async function startProductionOrder(id: string) {
   return { message: 'Pedido de Produção iniciado.' };
 }
 
-export async function completeProductionOrder(id: string) {
+export async function completeProductionOrder(id: string, deliveredQuantity: number) {
   const orderIndex = db.productionOrders.findIndex(order => order.id === id);
   if (orderIndex === -1) {
     return { message: 'Pedido de Produção não encontrado.', error: true };
@@ -147,12 +147,23 @@ export async function completeProductionOrder(id: string) {
   if (order.status !== 'in_progress') {
     return { message: 'Apenas pedidos "Em Progresso" podem ser concluídos.', error: true };
   }
+
+  if (typeof deliveredQuantity !== 'number' || !Number.isInteger(deliveredQuantity) || deliveredQuantity < 0) {
+    return { message: 'Quantidade entregue fornecida é inválida. Deve ser um número inteiro não negativo.', error: true };
+  }
+  // Optional: Add validation like deliveredQuantity <= order.quantity if needed
+  // if (deliveredQuantity > order.quantity) {
+  //   return { message: `Quantidade entregue (${deliveredQuantity}) não pode exceder a quantidade planejada (${order.quantity}).`, error: true };
+  // }
+
+
   order.status = 'completed';
   order.endTime = Date.now();
   order.totalProductionTime = order.endTime - (order.startTime || order.endTime); // ensure startTime exists
+  order.deliveredQuantity = deliveredQuantity;
   order.updatedAt = new Date();
   revalidatePath('/production-orders');
-  return { message: 'Pedido de Produção concluído.' };
+  return { message: `Pedido de Produção concluído com ${deliveredQuantity} unidades entregues.` };
 }
 
 export async function cancelProductionOrder(id: string) {
@@ -181,6 +192,9 @@ export async function deleteProductionOrder(id: string) {
   }
   // Optional: Add checks if order can be deleted based on status (e.g., not if 'in_progress')
   // For this example, we allow deletion regardless of status after confirmation.
+  if (db.productionOrders[orderIndex].status === 'in_progress') {
+    return { message: 'Pedidos "Em Progresso" não podem ser excluídos. Cancele ou conclua o pedido primeiro.', error: true };
+  }
   db.productionOrders.splice(orderIndex, 1);
   revalidatePath('/production-orders');
   return { message: 'Pedido de Produção excluído com sucesso.' };
