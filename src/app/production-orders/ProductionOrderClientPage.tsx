@@ -76,21 +76,29 @@ function TimerCell({ order }: { order: ProductionOrder }) {
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
     if (order.status === 'in_progress' && order.startTime) {
-      setElapsedTime(differenceInSeconds(new Date(), new Date(order.startTime)) * 1000);
+      const calculateTime = () => differenceInSeconds(new Date(), new Date(order.startTime!)) * 1000;
+      setElapsedTime(calculateTime()); // Initial set
       intervalId = setInterval(() => {
-        setElapsedTime(differenceInSeconds(new Date(), new Date(order.startTime!)) * 1000);
+        setElapsedTime(calculateTime());
       }, 1000);
+    } else if (order.totalProductionTime !== undefined) {
+        setElapsedTime(order.totalProductionTime);
     } else {
-      setElapsedTime(order.totalProductionTime);
+        setElapsedTime(undefined); // Reset or set to a default state if no time is applicable
     }
-    return () => clearInterval(intervalId);
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [order.status, order.startTime, order.totalProductionTime]);
   
   if (elapsedTime === undefined && order.status === 'in_progress') {
     return <Badge variant="outline" className="text-muted-foreground">Calculando...</Badge>;
   }
 
-  if (order.status === 'open') return <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>;
+  if (order.status === 'open' || (order.status !== 'in_progress' && elapsedTime === undefined)) {
+    return <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>;
+  }
+  
   return <div className="tabular-nums">{formatDuration(elapsedTime)}</div>;
 }
 
@@ -124,7 +132,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
   const handleAction = async () => {
     if (!confirmActionOrder) return;
     const { order, action } = confirmActionOrder;
-    let result: { message: string; error?: boolean } | undefined;
+    let result: { message: string; error?: boolean, errors?: Record<string, string[]> } | undefined;
 
     try {
       if (action === 'delete') {
@@ -133,8 +141,8 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
         result = await startProductionOrder(order.id);
       } else if (action === 'complete') {
         const qty = parseInt(deliveredQuantity, 10);
-        if (isNaN(qty) || qty < 0) {
-          toast({ title: 'Erro de Validação', description: 'Quantidade entregue deve ser um número não negativo.', variant: 'destructive' });
+        if (isNaN(qty) || qty < 0 || !Number.isInteger(qty)) {
+          toast({ title: 'Erro de Validação', description: 'Quantidade entregue deve ser um número inteiro não negativo.', variant: 'destructive' });
           return; // Do not close dialog, let user correct
         }
         result = await completeProductionOrder(order.id, qty);
@@ -151,8 +159,15 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
         toast({ title: 'Erro Inesperado', description: e.message || 'Ocorreu um erro.', variant: 'destructive' });
     } finally {
         // Only close dialog if action was successful or a non-validation error occurred
-        if (!(action === 'complete' && (result?.error || (isNaN(parseInt(deliveredQuantity, 10)) || parseInt(deliveredQuantity, 10) < 0 ) ))) {
+        const isCompleteAction = action === 'complete';
+        const hasValidationError = isCompleteAction && (isNaN(parseInt(deliveredQuantity, 10)) || parseInt(deliveredQuantity, 10) < 0 || !Number.isInteger(parseFloat(deliveredQuantity)));
+        const hasServerError = result?.error;
+
+        if (!(isCompleteAction && (hasValidationError || hasServerError))) {
            setConfirmActionOrder(null);
+        }
+        if (isCompleteAction && hasServerError && !hasValidationError) { // Close on server error if not a client validation error for quantity
+            setConfirmActionOrder(null);
         }
     }
   };
@@ -256,7 +271,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
         );
       },
     },
-  ], [skus]); // removed toast from dependencies as it's stable
+  ], [skus]); 
 
   const getAlertDialogTexts = () => {
     if (!confirmActionOrder) return { title: '', description: '', actionText: '' };
@@ -297,13 +312,13 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
               <DialogTitle>{editingOrder ? 'Editar Pedido de Produção' : 'Criar Novo Pedido de Produção'}</DialogTitle>
               <DialogDescription>
                 {editingOrder ? `Atualize os detalhes do pedido para ${editingOrder.skuCode}.` : 'Preencha os detalhes para o novo Pedido de Produção.'}
-                 {editingOrder && editingOrder.status !== 'open' && (
+                 {editingOrder && editingOrder.status !== 'open' && !(editingOrder.status === 'completed' || editingOrder.status === 'cancelled') && (
                     <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700 flex items-start">
                         <Info className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
                         <span>Pedidos com status diferente de "Aberta" têm campos limitados para edição (apenas Observações).</span>
                     </div>
                  )}
-                 {editingOrder && (order.status === 'completed' || order.status === 'cancelled') && (
+                 {editingOrder && (editingOrder.status === 'completed' || editingOrder.status === 'cancelled') && (
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700 flex items-start">
                         <Info className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
                         <span>Este pedido está {statusMap[editingOrder.status].label.toLowerCase()} e não pode mais ser editado. Apenas visualização.</span>
@@ -355,7 +370,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
                   className="mt-1"
                 />
                  { parseInt(deliveredQuantity, 10) < 0 && <p className="text-sm text-destructive">Quantidade não pode ser negativa.</p>}
-                 { !Number.isInteger(parseFloat(deliveredQuantity)) && deliveredQuantity !== '' && <p className="text-sm text-destructive">Quantidade deve ser um número inteiro.</p>}
+                 { !Number.isInteger(parseFloat(deliveredQuantity)) && deliveredQuantity !== '' && parseFloat(deliveredQuantity).toString() === deliveredQuantity && <p className="text-sm text-destructive">Quantidade deve ser um número inteiro.</p>}
               </div>
             )}
             <AlertDialogFooter>
@@ -363,6 +378,14 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
               <AlertDialogAction 
                 onClick={handleAction} 
                 className={confirmActionOrder.action === 'delete' || confirmActionOrder.action === 'cancel' ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground" : ""}
+                 disabled={
+                    confirmActionOrder.action === 'complete' && 
+                    (
+                        isNaN(parseInt(deliveredQuantity, 10)) || 
+                        parseInt(deliveredQuantity, 10) < 0 ||
+                        (!Number.isInteger(parseFloat(deliveredQuantity)) && deliveredQuantity !== '' && parseFloat(deliveredQuantity).toString() === deliveredQuantity)
+                    )
+                }
                >
                 {dialogTexts.actionText}
               </AlertDialogAction>
@@ -373,3 +396,4 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     </div>
   );
 }
+
