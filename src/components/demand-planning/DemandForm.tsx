@@ -206,21 +206,19 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
-                        mode="single" // Keeps day clicking for "select and close"
-                        month={selectedMonth} // Controlled displayed month
-                        selected={selectedMonth} // Highlights the first day of the month visually
-                        onSelect={(day) => { // Primarily for closing the popover and confirming
+                        mode="single" 
+                        month={selectedMonth}
+                        selected={selectedMonth} 
+                        onSelect={(day) => { 
                             if (day) {
                                 const firstOfClickedMonth = startOfMonth(day);
                                 setSelectedMonth(firstOfClickedMonth);
-                                // Form value is updated by useEffect watching selectedMonth
                             }
                             setIsCalendarOpen(false);
                         }}
-                        onMonthChange={(newMonth) => { // Updates when month/year dropdowns change
+                        onMonthChange={(newMonth) => { 
                             setSelectedMonth(startOfMonth(newMonth));
-                            // Form value is updated by useEffect watching selectedMonth
-                            // Popover remains open for user to confirm by clicking a day or clicking away
+                            setIsCalendarOpen(false); // Close popover after month/year change via dropdown
                         }}
                         captionLayout="dropdown-buttons"
                         fromYear={new Date().getFullYear() - 5}
