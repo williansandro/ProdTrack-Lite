@@ -23,7 +23,7 @@ import { CalendarIcon } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { createDemand, updateDemand } from '@/lib/actions/demand.actions';
 import { useRouter } from 'next/navigation';
-import { format, parse, isValid } from 'date-fns';
+import { format, parse, isValid, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
@@ -49,9 +49,12 @@ interface DemandFormProps {
 export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const [selectedMonth, setSelectedMonth] = useState<Date | undefined>(
-    demand?.monthYear ? parse(demand.monthYear, 'yyyy-MM', new Date()) : undefined
-  );
+  const [selectedMonth, setSelectedMonth] = useState<Date | undefined>(() => {
+    if (demand?.monthYear) {
+      return startOfMonth(parse(demand.monthYear, 'yyyy-MM', new Date()));
+    }
+    return startOfMonth(new Date());
+  });
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
 
@@ -66,7 +69,7 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
 
   useEffect(() => {
     if (demand) {
-      const initialDate = parse(demand.monthYear, 'yyyy-MM', new Date());
+      const initialDate = startOfMonth(parse(demand.monthYear, 'yyyy-MM', new Date()));
       setSelectedMonth(initialDate);
       form.reset({
         skuId: demand.skuId,
@@ -74,13 +77,11 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
         targetQuantity: demand.targetQuantity.toString(),
       });
     } else {
-      const currentMonth = new Date();
-      // Set day to 1 to avoid issues with month changes if current day doesn't exist in another month
-      currentMonth.setDate(1); 
-      setSelectedMonth(currentMonth);
+      const currentMonthDate = startOfMonth(new Date());
+      setSelectedMonth(currentMonthDate);
       form.reset({
         skuId: '',
-        monthYear: format(currentMonth, 'yyyy-MM'),
+        monthYear: format(currentMonthDate, 'yyyy-MM'),
         targetQuantity: '',
       });
     }
@@ -89,7 +90,7 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
   useEffect(() => {
     if (selectedMonth) {
       form.setValue('monthYear', format(selectedMonth, 'yyyy-MM'));
-      form.clearErrors('monthYear'); // Clear error once a valid month is set
+      form.clearErrors('monthYear'); 
     }
   }, [selectedMonth, form]);
 
@@ -180,7 +181,7 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
         <FormField
             control={form.control}
             name="monthYear"
-            render={({ field }) => (
+            render={({ field }) => ( // field here is for monthYear which is string 'yyyy-MM'
                 <FormItem className="flex flex-col">
                 <FormLabel>Mês/Ano da Demanda</FormLabel>
                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
@@ -190,11 +191,11 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
                         variant={"outline"}
                         className={cn(
                             "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
+                            !selectedMonth && "text-muted-foreground" // Use selectedMonth for display
                         )}
                         disabled={form.formState.isSubmitting}
                         >
-                        {selectedMonth ? (
+                        {selectedMonth ? ( // Display based on selectedMonth state
                             format(selectedMonth, "MMMM 'de' yyyy", { locale: ptBR })
                         ) : (
                             <span>Selecione Mês/Ano</span>
@@ -205,22 +206,26 @@ export function DemandForm({ demand, skus, onFormSubmit }: DemandFormProps) {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
-                        mode="single"
-                        captionLayout="dropdown-buttons"
-                        selected={selectedMonth}
-                        onSelect={(date) => {
-                            if (date) {
-                                // Ensure we are setting the first of the month to avoid timezone issues if that becomes relevant
-                                const newSelectedDate = new Date(date.getFullYear(), date.getMonth(), 1);
-                                setSelectedMonth(newSelectedDate);
-                                field.onChange(format(newSelectedDate, "yyyy-MM"));
+                        mode="single" // Keeps day clicking for "select and close"
+                        month={selectedMonth} // Controlled displayed month
+                        selected={selectedMonth} // Highlights the first day of the month visually
+                        onSelect={(day) => { // Primarily for closing the popover and confirming
+                            if (day) {
+                                const firstOfClickedMonth = startOfMonth(day);
+                                setSelectedMonth(firstOfClickedMonth);
+                                // Form value is updated by useEffect watching selectedMonth
                             }
-                            setIsCalendarOpen(false); // Close calendar on selection
+                            setIsCalendarOpen(false);
                         }}
+                        onMonthChange={(newMonth) => { // Updates when month/year dropdowns change
+                            setSelectedMonth(startOfMonth(newMonth));
+                            // Form value is updated by useEffect watching selectedMonth
+                            // Popover remains open for user to confirm by clicking a day or clicking away
+                        }}
+                        captionLayout="dropdown-buttons"
                         fromYear={new Date().getFullYear() - 5}
                         toYear={new Date().getFullYear() + 5}
                         disabled={(date) => form.formState.isSubmitting}
-                        defaultMonth={selectedMonth || new Date(new Date().setDate(1))} // Start with the first of the month
                         initialFocus
                      />
                     </PopoverContent>
