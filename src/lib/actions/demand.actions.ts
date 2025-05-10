@@ -17,7 +17,7 @@ const DemandFormSchema = z.object({
 });
 
 export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
-  await new Promise(resolve => setTimeout(resolve, 300)); // Simulate delay
+  // await new Promise(resolve => setTimeout(resolve, 300)); // Simulate delay
 
   const demandsWithSku = db.demands.map(demand => {
     const sku = db.skus.find(s => s.id === demand.skuId);
@@ -102,6 +102,7 @@ export async function createDemand(formData: DemandFormData) {
 
   db.demands.unshift(newDemand);
   revalidatePath('/demand-planning');
+  revalidatePath('/dashboard'); // Dashboard uses demand data
   return { message: 'Demanda criada com sucesso.', demand: newDemand };
 }
 
@@ -153,6 +154,7 @@ export async function updateDemand(id: string, formData: DemandFormData) {
   };
 
   revalidatePath('/demand-planning');
+  revalidatePath('/dashboard');
   return { message: 'Demanda atualizada com sucesso.', demand: db.demands[demandIndex] };
 }
 
@@ -164,5 +166,40 @@ export async function deleteDemand(id: string) {
 
   db.demands.splice(demandIndex, 1);
   revalidatePath('/demand-planning');
+  revalidatePath('/dashboard');
   return { message: 'Demanda excluída com sucesso.' };
+}
+
+
+export async function deleteMultipleDemands(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { message: 'Nenhuma demanda selecionada para exclusão.', error: true };
+  }
+
+  let deletedCount = 0;
+  const notFoundIds: string[] = [];
+
+  ids.forEach(id => {
+    const demandIndex = db.demands.findIndex(d => d.id === id);
+    if (demandIndex !== -1) {
+      db.demands.splice(demandIndex, 1);
+      deletedCount++;
+    } else {
+      notFoundIds.push(id);
+    }
+  });
+
+  if (deletedCount > 0) {
+    revalidatePath('/demand-planning');
+    revalidatePath('/dashboard');
+  }
+
+  if (notFoundIds.length > 0) {
+    return { 
+      message: `${deletedCount} demanda(s) excluída(s). ${notFoundIds.length} demanda(s) não encontrada(s).`, 
+      error: true 
+    };
+  }
+
+  return { message: `${deletedCount} demanda(s) excluída(s) com sucesso.` };
 }

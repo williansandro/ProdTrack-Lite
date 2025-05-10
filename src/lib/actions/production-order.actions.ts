@@ -16,7 +16,7 @@ const ProductionOrderSchema = z.object({
 });
 
 export async function getProductionOrders(): Promise<ProductionOrder[]> {
-  await new Promise(resolve => setTimeout(resolve, 200)); // Simulate network delay
+  // await new Promise(resolve => setTimeout(resolve, 200)); // Simulate network delay
   // Ensure related SKU code is up-to-date if it can change
   return [...db.productionOrders].map(po => {
     const sku = db.skus.find(s => s.id === po.skuId);
@@ -25,7 +25,7 @@ export async function getProductionOrders(): Promise<ProductionOrder[]> {
 }
 
 export async function getProductionOrderById(id: string): Promise<ProductionOrder | undefined> {
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // await new Promise(resolve => setTimeout(resolve, 100));
   const po = db.productionOrders.find(order => order.id === id);
   if (po) {
     const sku = db.skus.find(s => s.id === po.skuId);
@@ -68,6 +68,7 @@ export async function createProductionOrder(formData: ProductionOrderFormData) {
   db.productionOrders.unshift(newOrder);
 
   revalidatePath('/production-orders');
+  revalidatePath('/dashboard'); // Dashboard uses PO data
   return { message: 'Pedido de Produção criado com sucesso.', order: newOrder };
 }
 
@@ -120,6 +121,7 @@ export async function updateProductionOrder(id: string, formData: ProductionOrde
   };
 
   revalidatePath('/production-orders');
+  revalidatePath('/dashboard');
   return { message: 'Pedido de Produção atualizado com sucesso.', order: db.productionOrders[orderIndex] };
 }
 
@@ -135,6 +137,7 @@ export async function startProductionOrder(id: string) {
   db.productionOrders[orderIndex].startTime = Date.now();
   db.productionOrders[orderIndex].updatedAt = new Date();
   revalidatePath('/production-orders');
+  revalidatePath('/dashboard');
   return { message: 'Pedido de Produção iniciado.' };
 }
 
@@ -165,6 +168,7 @@ export async function completeProductionOrder(id: string, deliveredQuantity: num
   }
 
   revalidatePath('/production-orders');
+  revalidatePath('/dashboard');
   return { message: `Pedido de Produção concluído com ${deliveredQuantity} unidades entregues.` };
 }
 
@@ -184,6 +188,7 @@ export async function cancelProductionOrder(id: string) {
   }
   order.updatedAt = new Date();
   revalidatePath('/production-orders');
+  revalidatePath('/dashboard');
   return { message: 'Pedido de Produção cancelado.' };
 }
 
@@ -192,13 +197,59 @@ export async function deleteProductionOrder(id: string) {
   if (orderIndex === -1) {
     return { message: 'Pedido de Produção não encontrado.', error: true };
   }
-  // Optional: Add checks if order can be deleted based on status (e.g., not if 'in_progress')
-  // For this example, we allow deletion regardless of status after confirmation.
   if (db.productionOrders[orderIndex].status === 'in_progress') {
     return { message: 'Pedidos "Em Progresso" não podem ser excluídos. Cancele ou conclua o pedido primeiro.', error: true };
   }
   db.productionOrders.splice(orderIndex, 1);
   revalidatePath('/production-orders');
+  revalidatePath('/dashboard');
   return { message: 'Pedido de Produção excluído com sucesso.' };
 }
 
+
+export async function deleteMultipleProductionOrders(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { message: 'Nenhum pedido de produção selecionado para exclusão.', error: true };
+  }
+
+  let deletedCount = 0;
+  const notFoundIds: string[] = [];
+  const inProgressIds: string[] = [];
+
+  ids.forEach(id => {
+    const orderIndex = db.productionOrders.findIndex(o => o.id === id);
+    if (orderIndex !== -1) {
+      if (db.productionOrders[orderIndex].status === 'in_progress') {
+        inProgressIds.push(id);
+      } else {
+        db.productionOrders.splice(orderIndex, 1);
+        deletedCount++;
+      }
+    } else {
+      notFoundIds.push(id);
+    }
+  });
+
+  let message = '';
+  if (deletedCount > 0) {
+    revalidatePath('/production-orders');
+    revalidatePath('/dashboard');
+    message += `${deletedCount} pedido(s) excluído(s) com sucesso. `;
+  }
+
+  if (inProgressIds.length > 0) {
+    message += `${inProgressIds.length} pedido(s) "Em Progresso" não puderam ser excluído(s). Cancele ou conclua-os primeiro. `;
+  }
+  if (notFoundIds.length > 0) {
+    message += `${notFoundIds.length} pedido(s) não encontrado(s).`;
+  }
+
+  if (message === '') {
+    message = 'Nenhum pedido foi excluído.';
+  }
+
+  return { 
+    message: message.trim(), 
+    error: inProgressIds.length > 0 || notFoundIds.length > 0 
+  };
+}

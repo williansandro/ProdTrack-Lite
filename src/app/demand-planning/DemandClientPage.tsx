@@ -2,8 +2,8 @@
 "use client";
 
 import type { DemandWithProgress, SKU } from '@/lib/types';
-import type { ColumnDef } from "@tanstack/react-table";
-import { useState, useMemo } from 'react';
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -28,10 +28,10 @@ import { DataTable } from '@/components/shared/DataTable';
 import { DemandForm } from '@/components/demand-planning/DemandForm';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { MoreHorizontal, Edit3, Trash2, PlusCircle, CalendarDays } from 'lucide-react';
+import { MoreHorizontal, Edit3, Trash2, PlusCircle, CalendarDays, Trash } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { deleteDemand } from '@/lib/actions/demand.actions';
+import { deleteDemand, deleteMultipleDemands } from '@/lib/actions/demand.actions';
 import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -54,6 +54,9 @@ export function DemandClientPage({ initialDemands, skus }: DemandClientPageProps
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDemand, setEditingDemand] = useState<DemandWithProgress | null>(null);
   const [deletingDemand, setDeletingDemand] = useState<DemandWithProgress | null>(null);
+  const [demandsToDelete, setDemandsToDelete] = useState<DemandWithProgress[]>([]);
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const { toast } = useToast();
 
   const handleFormSubmit = () => {
@@ -80,6 +83,26 @@ export function DemandClientPage({ initialDemands, skus }: DemandClientPageProps
         toast({ title: 'Sucesso', description: result.message });
     }
     setDeletingDemand(null);
+  };
+
+  const selectedDemandIds = useMemo(() => {
+    return Object.keys(rowSelection).filter(key => rowSelection[key]);
+  }, [rowSelection, initialDemands]);
+
+
+  const handleBulkDelete = async () => {
+    if (selectedDemandIds.length === 0) {
+      toast({ title: 'Nenhuma demanda selecionada', description: 'Selecione demandas para excluir.', variant: 'destructive' });
+      return;
+    }
+    const result = await deleteMultipleDemands(selectedDemandIds);
+    if (result.error) {
+      toast({ title: 'Erro na Exclusão em Massa', description: result.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Sucesso', description: result.message });
+      setRowSelection({}); // Clear selection
+    }
+    setIsBulkDeleteConfirmOpen(false);
   };
   
   const columns: ColumnDef<DemandWithProgress>[] = useMemo(() => [
@@ -180,6 +203,20 @@ export function DemandClientPage({ initialDemands, skus }: DemandClientPageProps
           </DialogContent>
         </Dialog>
       </div>
+      
+      {selectedDemandIds.length > 0 && (
+        <div className="flex items-center justify-start space-x-2 my-4">
+          <Button
+            variant="destructive"
+            onClick={() => setIsBulkDeleteConfirmOpen(true)}
+            disabled={selectedDemandIds.length === 0}
+          >
+            <Trash className="mr-2 h-4 w-4" />
+            Excluir {selectedDemandIds.length} Demanda(s) Selecionada(s)
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Metas Mensais</CardTitle>
@@ -190,6 +227,10 @@ export function DemandClientPage({ initialDemands, skus }: DemandClientPageProps
                 data={initialDemands}
                 filterColumn="skuCode"
                 filterPlaceholder="Filtrar por SKU..."
+                enableRowSelection={true}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                getId={(row) => row.id}
             />
         </CardContent>
       </Card>
@@ -207,6 +248,25 @@ export function DemandClientPage({ initialDemands, skus }: DemandClientPageProps
               <AlertDialogCancel onClick={() => setDeletingDemand(null)}>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                 Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {isBulkDeleteConfirmOpen && (
+        <AlertDialog open={isBulkDeleteConfirmOpen} onOpenChange={setIsBulkDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
+              <AlertDialogDescription>
+                Você tem certeza que deseja excluir as <strong>{selectedDemandIds.length}</strong> demandas selecionadas? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                Excluir Selecionadas
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

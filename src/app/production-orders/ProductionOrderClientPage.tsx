@@ -2,7 +2,7 @@
 "use client";
 
 import type { ProductionOrder, SKU, ProductionOrderStatus } from '@/lib/types';
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,14 +29,15 @@ import { Label } from '@/components/ui/label';
 import { DataTable } from '@/components/shared/DataTable';
 import { ProductionOrderForm } from '@/components/production-orders/ProductionOrderForm';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, Edit3, Trash2, Play, CheckCircle, XCircle, PlusCircle, Info, Clock } from 'lucide-react';
+import { MoreHorizontal, Edit3, Trash2, Play, CheckCircle, XCircle, PlusCircle, Info, Clock, Trash } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import {
   deleteProductionOrder,
   startProductionOrder,
   completeProductionOrder,
-  cancelProductionOrder
+  cancelProductionOrder,
+  deleteMultipleProductionOrders
 } from '@/lib/actions/production-order.actions';
 import { differenceInSeconds } from 'date-fns';
 import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
@@ -112,6 +113,8 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
   const [editingOrder, setEditingOrder] = useState<ProductionOrder | null>(null);
   const [confirmActionOrder, setConfirmActionOrder] = useState<{ order: ProductionOrder; action: 'delete' | 'start' | 'complete' | 'cancel' } | null>(null);
   const [deliveredQuantity, setDeliveredQuantity] = useState<string>('');
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
 
   const handleFormSubmit = () => {
@@ -174,6 +177,25 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
         }
     }
   };
+
+  const selectedOrderIds = useMemo(() => {
+    return Object.keys(rowSelection).filter(key => rowSelection[key]);
+  }, [rowSelection, initialProductionOrders]);
+
+  const handleBulkDelete = async () => {
+    if (selectedOrderIds.length === 0) {
+      toast({ title: 'Nenhum pedido selecionado', description: 'Selecione pedidos para excluir.', variant: 'destructive' });
+      return;
+    }
+    const result = await deleteMultipleProductionOrders(selectedOrderIds);
+    if (result.error) {
+      toast({ title: 'Erro na Exclusão em Massa', description: result.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Sucesso', description: result.message });
+      setRowSelection({}); // Clear selection
+    }
+    setIsBulkDeleteConfirmOpen(false);
+  };
   
   const columns: ColumnDef<ProductionOrder>[] = useMemo(() => [
     {
@@ -215,7 +237,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
                 </div>
             );
         }
-        return order.quantity;
+        return order.quantity.toLocaleString('pt-BR');
       }
     },
     {
@@ -368,6 +390,20 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
           </DialogContent>
         </Dialog>
       </div>
+      
+      {selectedOrderIds.length > 0 && (
+        <div className="flex items-center justify-start space-x-2 my-4">
+          <Button
+            variant="destructive"
+            onClick={() => setIsBulkDeleteConfirmOpen(true)}
+            disabled={selectedOrderIds.length === 0}
+          >
+            <Trash className="mr-2 h-4 w-4" />
+            Excluir {selectedOrderIds.length} Pedido(s) Selecionado(s)
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Lista de Pedidos</CardTitle>
@@ -378,6 +414,10 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
                 data={initialProductionOrders}
                 filterColumn="skuCode"
                 filterPlaceholder="Filtrar por SKU..."
+                enableRowSelection={true}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                getId={(row) => row.id}
             />
         </CardContent>
       </Card>
@@ -427,7 +467,25 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      {isBulkDeleteConfirmOpen && (
+        <AlertDialog open={isBulkDeleteConfirmOpen} onOpenChange={setIsBulkDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
+              <AlertDialogDescription>
+                Você tem certeza que deseja excluir os <strong>{selectedOrderIds.length}</strong> pedidos selecionados? Pedidos "Em Progresso" não serão excluídos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                Excluir Selecionados
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
-
