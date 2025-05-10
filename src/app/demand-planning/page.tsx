@@ -13,17 +13,17 @@ export default async function DemandPlanningPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Demand Planning</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Planejamento de Demanda</h1>
         <Button disabled> {/* Replace with DialogTrigger when form is ready */}
-          <PlusCircle className="mr-2 h-5 w-5" /> Set New Demand
+          <PlusCircle className="mr-2 h-5 w-5" /> Definir Nova Demanda
         </Button>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Targets</CardTitle>
+          <CardTitle>Metas Mensais</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">Demand planning functionalities, including setting targets and tracking progress, will be implemented here.</p>
+          <p className="text-muted-foreground">Funcionalidades de planejamento de demanda, incluindo definição de metas e acompanhamento do progresso, serão implementadas aqui.</p>
           {/* <DemandClientPage initialDemands={demands} skus={skus} /> */}
         </CardContent>
       </Card>

@@ -34,8 +34,8 @@ export function DashboardClientContent({
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Production Order Status</CardTitle>
-          <CardDescription>Overview of current order statuses</CardDescription>
+          <CardTitle>Status dos Pedidos de Produção</CardTitle>
+          <CardDescription>Visão geral dos status atuais dos pedidos</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfigProductionStatus} className="h-[300px] w-full">
@@ -71,8 +71,8 @@ export function DashboardClientContent({
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Production vs. Target</CardTitle>
-          <CardDescription>Tracking output against set goals</CardDescription>
+          <CardTitle>Produção Mensal vs. Meta</CardTitle>
+          <CardDescription>Acompanhamento da produção em relação às metas definidas</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfigMonthlyProduction} className="h-[300px] w-full">

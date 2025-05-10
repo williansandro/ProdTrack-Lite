@@ -6,8 +6,8 @@ import type { SKU, SkuFormData } from '@/lib/types';
 import { db, generateId } from '@/lib/data'; // Using the mock db
 
 const SkuSchema = z.object({
-  code: z.string().min(1, { message: 'Code is required.' }).max(50),
-  description: z.string().min(1, { message: 'Description is required.' }).max(255),
+  code: z.string().min(1, { message: 'Código é obrigatório.' }).max(50),
+  description: z.string().min(1, { message: 'Descrição é obrigatória.' }).max(255),
 });
 
 export async function getSkus(): Promise<SKU[]> {
@@ -26,7 +26,7 @@ export async function createSku(formData: SkuFormData) {
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Failed to create SKU. Please check the fields.',
+      message: 'Falha ao criar SKU. Verifique os campos.',
     };
   }
 
@@ -35,8 +35,8 @@ export async function createSku(formData: SkuFormData) {
   const existingSku = db.skus.find(sku => sku.code.toLowerCase() === code.toLowerCase());
   if (existingSku) {
     return {
-      errors: { code: ['This SKU code already exists.'] },
-      message: 'Failed to create SKU. Code already in use.',
+      errors: { code: ['Este código de SKU já existe.'] },
+      message: 'Falha ao criar SKU. Código já em uso.',
     };
   }
 
@@ -51,7 +51,7 @@ export async function createSku(formData: SkuFormData) {
   db.skus.unshift(newSku); // Add to the beginning of the array
 
   revalidatePath('/skus');
-  return { message: 'SKU created successfully.', sku: newSku };
+  return { message: 'SKU criado com sucesso.', sku: newSku };
 }
 
 export async function updateSku(id: string, formData: SkuFormData) {
@@ -60,7 +60,7 @@ export async function updateSku(id: string, formData: SkuFormData) {
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Failed to update SKU. Please check the fields.',
+      message: 'Falha ao atualizar SKU. Verifique os campos.',
     };
   }
 
@@ -68,15 +68,15 @@ export async function updateSku(id: string, formData: SkuFormData) {
   const skuIndex = db.skus.findIndex(sku => sku.id === id);
 
   if (skuIndex === -1) {
-    return { message: 'SKU not found.' };
+    return { message: 'SKU não encontrado.' , error: true};
   }
 
   // Check if new code conflicts with another existing SKU
   const existingSkuWithCode = db.skus.find(sku => sku.code.toLowerCase() === code.toLowerCase() && sku.id !== id);
   if (existingSkuWithCode) {
     return {
-      errors: { code: ['This SKU code is already used by another SKU.'] },
-      message: 'Failed to update SKU. Code conflict.',
+      errors: { code: ['Este código de SKU já é usado por outro SKU.'] },
+      message: 'Falha ao atualizar SKU. Conflito de código.',
     };
   }
 
@@ -89,14 +89,14 @@ export async function updateSku(id: string, formData: SkuFormData) {
 
   revalidatePath('/skus');
   revalidatePath(`/skus/${id}/edit`); // If there's an edit page
-  return { message: 'SKU updated successfully.', sku: db.skus[skuIndex] };
+  return { message: 'SKU atualizado com sucesso.', sku: db.skus[skuIndex] };
 }
 
 export async function deleteSku(id: string) {
   const skuIndex = db.skus.findIndex(sku => sku.id === id);
 
   if (skuIndex === -1) {
-    return { message: 'SKU not found.' };
+    return { message: 'SKU não encontrado.', error: true };
   }
   
   // Check if SKU is used in production orders or demands (optional: prevent deletion if in use)
@@ -104,12 +104,12 @@ export async function deleteSku(id: string) {
   const isInUseDemand = db.demands.some(demand => demand.skuId === id);
 
   if (isInUsePO || isInUseDemand) {
-    return { message: 'SKU cannot be deleted because it is used in production orders or demand plans.', error: true };
+    return { message: 'O SKU não pode ser excluído porque é usado em pedidos de produção ou planos de demanda.', error: true };
   }
 
 
   db.skus.splice(skuIndex, 1);
 
   revalidatePath('/skus');
-  return { message: 'SKU deleted successfully.' };
+  return { message: 'SKU excluído com sucesso.' };
 }

@@ -22,8 +22,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 const SkuFormSchema = z.object({
-  code: z.string().min(1, 'Code is required').max(50, 'Code must be 50 characters or less'),
-  description: z.string().min(1, 'Description is required').max(255, 'Description must be 255 characters or less'),
+  code: z.string().min(1, 'Código é obrigatório').max(50, 'Código deve ter 50 caracteres ou menos'),
+  description: z.string().min(1, 'Descrição é obrigatória').max(255, 'Descrição deve ter 255 caracteres ou menos'),
 });
 
 interface SkuFormProps {
@@ -75,13 +75,13 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
           });
         });
         toast({
-          title: 'Error',
-          description: result.message || 'Failed to save SKU.',
+          title: 'Erro',
+          description: result.message || 'Falha ao salvar SKU.',
           variant: 'destructive',
         });
       } else {
         toast({
-          title: 'Success!',
+          title: 'Sucesso!',
           description: result.message,
         });
         if (onFormSubmit) {
@@ -92,8 +92,8 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
     } catch (error) {
       console.error('Form submission error:', error);
       toast({
-        title: 'Error',
-        description: 'An unexpected error occurred.',
+        title: 'Erro',
+        description: 'Ocorreu um erro inesperado.',
         variant: 'destructive',
       });
     }
@@ -107,9 +107,9 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
           name="code"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>SKU Code</FormLabel>
+              <FormLabel>Código do SKU</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., ABC-123" {...field} />
+                <Input placeholder="ex: ABC-123" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -120,9 +120,9 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Description</FormLabel>
+              <FormLabel>Descrição</FormLabel>
               <FormControl>
-                <Textarea placeholder="Detailed description of the SKU" {...field} className="min-h-[100px]" />
+                <Textarea placeholder="Descrição detalhada do SKU" {...field} className="min-h-[100px]" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -131,11 +131,11 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
         <div className="flex justify-end gap-2">
           {onFormSubmit && ( // Show cancel button only if it's in a dialog context
              <Button type="button" variant="outline" onClick={onFormSubmit} disabled={form.formState.isSubmitting}>
-                Cancel
+                Cancelar
              </Button>
           )}
           <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? (sku ? 'Saving...' : 'Creating...') : (sku ? 'Save Changes' : 'Create SKU')}
+            {form.formState.isSubmitting ? (sku ? 'Salvando...' : 'Criando...') : (sku ? 'Salvar Alterações' : 'Criar SKU')}
           </Button>
         </div>
       </form>

@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { LayoutDashboard, Package, ClipboardList, Target, Settings, ChevronsLeft, ChevronsRight, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Target, Settings, UserCircle } from 'lucide-react';
 import { Logo } from '@/components/icons/Logo';
 import { cn } from '@/lib/utils';
 
@@ -27,22 +27,22 @@ interface AppLayoutProps {
 }
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Painel de Controle', icon: LayoutDashboard },
   { href: '/skus', label: 'SKUs', icon: Package },
-  { href: '/production-orders', label: 'Production Orders', icon: ClipboardList },
-  { href: '/demand-planning', label: 'Demand Planning', icon: Target },
+  { href: '/production-orders', label: 'Pedidos de Produção', icon: ClipboardList },
+  { href: '/demand-planning', label: 'Planejamento de Demanda', icon: Target },
 ];
 
 function UserNav() {
   // Placeholder for user authentication state
   const isLoggedIn = true; 
-  const userName = "User Name";
-  const userEmail = "user@example.com";
+  const userName = "Nome do Usuário"; // Example, replace with actual data or keep as "User Name" if dynamic
+  const userEmail = "usuario@exemplo.com"; // Example
 
   if (!isLoggedIn) {
     return (
       <Button asChild variant="outline">
-        <Link href="/login">Login</Link>
+        <Link href="/login">Entrar</Link>
       </Button>
     );
   }
@@ -71,11 +71,11 @@ function UserNav() {
         <DropdownMenuSeparator />
         <DropdownMenuItem>
           <Settings className="mr-2 h-4 w-4" />
-          <span>Settings</span>
+          <span>Configurações</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem>
-          <span>Log out</span>
+          <span>Sair</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -90,7 +90,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider>
       <Sidebar collapsible="icon" className="border-r">
         <SidebarHeader className="p-3 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden" aria-label="Back to Dashboard">
+          <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden" aria-label="Voltar para o Painel de Controle">
             <Logo className="w-7 h-7 text-primary flex-shrink-0" />
             <h1 className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden whitespace-nowrap">ProdTrack Lite</h1>
           </Link>
@@ -125,12 +125,12 @@ export function AppLayout({ children }: AppLayoutProps) {
             <SidebarMenuItem>
               <SidebarMenuButton 
                 asChild 
-                tooltip={{ children: "Settings", side: 'right', className: 'bg-sidebar-accent text-sidebar-accent-foreground' }}
+                tooltip={{ children: "Configurações", side: 'right', className: 'bg-sidebar-accent text-sidebar-accent-foreground' }}
                 className="justify-start"
               >
                 <Link href="#">
                   <Settings className="h-5 w-5" />
-                  <span className="group-data-[collapsible=icon]:hidden">Settings</span>
+                  <span className="group-data-[collapsible=icon]:hidden">Configurações</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -141,7 +141,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <SidebarInset>
         <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-background/80 backdrop-blur-sm border-b md:px-6">
           <div className="md:hidden">
-            <SidebarTrigger aria-label="Toggle Sidebar Menu"/>
+            <SidebarTrigger aria-label="Alternar Barra Lateral"/>
           </div>
           <div className="flex-1" /> {/* Spacer */}
           <UserNav />
