@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DataTable } from '@/components/shared/DataTable';
 import { ProductionOrderForm } from '@/components/production-orders/ProductionOrderForm';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +45,7 @@ interface ProductionOrderClientPageProps {
 }
 
 function formatDuration(ms: number | undefined): string {
-  if (ms === undefined || ms === null || ms < 0) return "N/A";
+  if (ms === undefined || ms === null || ms < 0) return "N/D";
   if (ms === 0) return "0s";
 
   const totalSeconds = Math.floor(ms / 1000);
@@ -209,7 +210,7 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
                   Cancelar Produção
                 </DropdownMenuItem>
               )}
-              { (order.status === 'open' || order.status === 'cancelled' || order.status === 'completed') && ( // Allow delete for open, cancelled, or completed
+              { (order.status === 'open' || order.status === 'cancelled' || order.status === 'completed') && ( // Permitir exclusão para aberta, cancelada ou concluída
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setConfirmActionOrder({ order, action: 'delete' })} className="text-destructive focus:text-destructive focus:bg-destructive/10">
@@ -315,3 +316,4 @@ export function ProductionOrderClientPage({ initialProductionOrders, skus }: Pro
     </div>
   );
 }
+
