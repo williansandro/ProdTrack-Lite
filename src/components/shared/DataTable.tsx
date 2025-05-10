@@ -1,6 +1,5 @@
 "use client";
 
-import *_React from 'react'; // HACK: To avoid error "React refers to a UMD global, but the current file is a module"
 import {
   ColumnDef,
   flexRender,
