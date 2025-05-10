@@ -1,4 +1,3 @@
-
 import type { SKU, ProductionOrder, Demand, ProductionOrderStatus } from './types';
 
 interface DataStore {
@@ -156,14 +155,17 @@ declare global {
 
 let db: DataStore;
 
+// Use a type assertion for globalThis to avoid TypeScript errors with __db__
+const g = globalThis as typeof globalThis & { __db__?: DataStore };
+
 if (process.env.NODE_ENV === 'production') {
   db = initializeDb();
 } else {
   // In development, use a global variable to preserve the database across HMR
-  if (!global.__db__) {
-    global.__db__ = initializeDb();
+  if (!g.__db__) {
+    g.__db__ = initializeDb();
   }
-  db = global.__db__;
+  db = g.__db__;
 }
 
 export { db };
