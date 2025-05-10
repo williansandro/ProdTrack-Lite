@@ -35,6 +35,11 @@ export interface Demand {
   updatedAt: Date;
 }
 
+export interface DemandWithProgress extends Demand {
+  producedQuantity: number;
+  progressPercentage: number;
+}
+
 // Helper type for form data, typically without id, createdAt, updatedAt
 export type SkuFormData = Omit<SKU, 'id' | 'createdAt' | 'updatedAt'>;
 
@@ -45,6 +50,8 @@ export type ProductionOrderFormData = {
   notes?: string;
 };
 
-export type DemandFormData = Omit<Demand, 'id' | 'skuCode' | 'createdAt' | 'updatedAt'> & { targetQuantity: string }; // targetQuantity as string from form
-
-
+export type DemandFormData = {
+  skuId: string;
+  monthYear: string; // Format: "YYYY-MM"
+  targetQuantity: string; // Will be coerced to number
+};
