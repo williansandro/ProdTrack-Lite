@@ -159,10 +159,9 @@ let db: DataStore;
 if (process.env.NODE_ENV === 'production') {
   db = initializeDb();
 } else {
-  // In development, use a global variable to preserve the db instance across HMR reloads
-  if (!global.__db__) {
-    global.__db__ = initializeDb();
-  }
+  // In development, ensure db is reset on each module evaluation (e.g. HMR, server restart)
+  // by always re-initializing it. This prevents data from persisting across code changes during development.
+  global.__db__ = initializeDb();
   db = global.__db__;
 }
 
