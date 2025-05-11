@@ -15,7 +15,7 @@ import {
   Menu as MenuIcon,
   LogOut,
   BarChart3, // For "Desempenho"
-  X, // Added X icon for close button
+  X, 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -37,16 +37,16 @@ interface AppLayoutProps {
 
 const navItems = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
-  { href: '/skus', label: 'SKU', icon: Package },
+  { href: '/skus', label: 'SKUs', icon: Package },
   { href: '/production-orders', label: 'Produção', icon: ClipboardList },
   { href: '/demand-planning', label: 'Demanda', icon: Target },
-  { href: '/performance', label: 'Desempenho', icon: BarChart3 }, // Added "Desempenho"
+  { href: '/performance', label: 'Desempenho', icon: BarChart3 }, 
 ];
 
 // Mock user data as per image
 const MOCKED_USER = {
   name: "williansandro6",
-  avatarUrl: "https://picsum.photos/40/40",
+  avatarUrl: "https://picsum.photos/40/40", // data-ai-hint="user avatar"
 };
 
 export function AppLayout({ children }: AppLayoutProps) {
@@ -91,15 +91,6 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </Link>
               </Button>
             </nav>
-
-            {/* User Avatar (can be part of UserNav or separate if UserNav is more complex) */}
-            {/* For simplicity, removed DropdownMenu based on image, direct "Sair" link is used */}
-            {/* <Avatar className="h-9 w-9 hidden md:block">
-              <AvatarImage src={MOCKED_USER.avatarUrl} alt="Avatar do usuário" data-ai-hint="user avatar" />
-              <AvatarFallback>
-                {MOCKED_USER.name ? MOCKED_USER.name.slice(0,2).toUpperCase() : <UserCircle className="h-5 w-5" />}
-              </AvatarFallback>
-            </Avatar> */}
             
             {/* Mobile Navigation Trigger */}
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
@@ -109,36 +100,46 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <span className="sr-only">Abrir menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-full max-w-xs sm:max-w-sm p-0 bg-background border-r border-border">
+              <SheetContent side="left" className="w-full max-w-xs sm:max-w-sm p-0 bg-card border-r border-border"> {/* Changed to bg-card */}
                 <div className="flex h-full flex-col">
                   <div className="flex items-center justify-between border-b border-border p-4">
                      <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
-                        <span className="text-lg font-bold">PCP Tracker</span>
+                        <span className="text-lg font-bold text-foreground">PCP Tracker</span> {/* Text foreground for title */}
                     </Link>
                     <SheetClose asChild>
-                         <Button variant="ghost" size="icon" className="md:hidden">
-                            <X className="h-6 w-6" /> {/* Changed to X icon */}
+                         <Button variant="ghost" size="icon" className="md:hidden text-muted-foreground hover:text-foreground"> {/* Ensure visibility */}
+                            <X className="h-6 w-6" /> 
                             <span className="sr-only">Fechar menu</span>
                         </Button>
                     </SheetClose>
                   </div>
                   <nav className="flex-grow p-4 space-y-2">
-                    <div className='mb-4 p-2 rounded-md bg-card'>
-                        <p className="text-sm font-medium leading-none">{MOCKED_USER.name}</p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                            {MOCKED_USER.name}@example.com
-                        </p>
+                    <div className='mb-4 p-3 rounded-md bg-background border border-border'> {/* bg-background and border for user info */}
+                        <div className="flex items-center space-x-3">
+                            <Avatar className="h-10 w-10">
+                                <AvatarImage src={MOCKED_USER.avatarUrl} alt="Avatar do usuário" data-ai-hint="user avatar" />
+                                <AvatarFallback>
+                                    {MOCKED_USER.name ? MOCKED_USER.name.slice(0,2).toUpperCase() : <UserCircle className="h-5 w-5" />}
+                                </AvatarFallback>
+                            </Avatar>
+                            <div>
+                                <p className="text-sm font-semibold leading-none text-foreground">{MOCKED_USER.name}</p>
+                                <p className="text-xs leading-none text-muted-foreground">
+                                    {MOCKED_USER.name}@example.com
+                                </p>
+                            </div>
+                        </div>
                     </div>
                     {navItems.map((item) => (
                       <Button
                         key={item.href}
-                        variant={ (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) ? "secondary" : "ghost" }
+                        variant={ (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) ? "default" : "ghost" } // "default" for active
                         asChild
                         className={cn(
-                          "w-full justify-start text-base",
+                          "w-full justify-start text-base py-3", // increased py
                            (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))
-                            ? "font-semibold bg-accent text-accent-foreground"
-                            : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                            ? "font-semibold bg-primary text-primary-foreground hover:bg-primary/90" // active style
+                            : "text-foreground hover:bg-accent/50 hover:text-accent-foreground" // inactive style, ensure text-foreground for visibility
                         )}
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
@@ -148,27 +149,27 @@ export function AppLayout({ children }: AppLayoutProps) {
                         </Link>
                       </Button>
                     ))}
-                     <div className="border-t border-border pt-4 mt-4">
+                     <div className="border-t border-border pt-4 mt-auto"> {/* mt-auto to push to bottom */}
                         <Button
                             variant="ghost"
                             asChild
-                            className="w-full justify-start text-base text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-                            onClick={() => setIsMobileMenuOpen(false)} // Assuming logout action
-                          >
-                            <Link href="/logout">
-                              <LogOut className="mr-3 h-5 w-5" />
-                              Sair
-                            </Link>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            asChild
-                            className="w-full justify-start text-base text-muted-foreground"
+                            className="w-full justify-start text-base text-foreground hover:bg-accent/50 hover:text-accent-foreground" // text-foreground
                             onClick={() => setIsMobileMenuOpen(false)}
                           >
                             <Link href="/settings">
                               <Settings className="mr-3 h-5 w-5" />
                               Configurações
+                            </Link>
+                          </Button>
+                        <Button
+                            variant="ghost"
+                            asChild
+                            className="w-full justify-start text-base text-destructive hover:bg-destructive/10 hover:text-destructive" // text-destructive
+                            onClick={() => setIsMobileMenuOpen(false)} // Assuming logout action
+                          >
+                            <Link href="/logout">
+                              <LogOut className="mr-3 h-5 w-5" />
+                              Sair
                             </Link>
                           </Button>
                      </div>
@@ -179,7 +180,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         </div>
       </header>
-      <main className="flex-1 container py-6 md:py-8 lg:py-10"> {/* Removed bg-secondary/30, main background is now dark */}
+      <main className="flex-1 container py-6 md:py-8 lg:py-10">
         {children}
       </main>
        <footer className="py-6 md:px-8 md:py-0 border-t border-border bg-background">
@@ -192,3 +193,4 @@ export function AppLayout({ children }: AppLayoutProps) {
     </div>
   );
 }
+

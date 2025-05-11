@@ -56,3 +56,13 @@ export type DemandFormData = {
   monthYear: string; // Format: "YYYY-MM"
   targetQuantity: string; // Will be coerced to number
 };
+
+export interface PerformanceSkuData {
+  id: string;
+  skuCode: string;
+  description: string;
+  totalProduced: number;
+  percentageOfTotal: number;
+  cumulativePercentage: number;
+  abcCategory: 'A' | 'B' | 'C';
+}
