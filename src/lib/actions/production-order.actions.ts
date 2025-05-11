@@ -1,10 +1,10 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { ProductionOrder, ProductionOrderFormData, ProductionOrderStatus, SKU } from '@/lib/types';
-import { db, generateId } from '@/lib/data'; // Using the mock db
+import { firestoreDb, PRODUCTION_ORDERS_COLLECTION, SKUS_COLLECTION, generateId } from '@/lib/data';
+import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
 
 const ProductionOrderSchema = z.object({
   skuId: z.string().min(1, { message: 'SKU é obrigatório.' }),
@@ -15,29 +15,58 @@ const ProductionOrderSchema = z.object({
   notes: z.string().max(500, 'Observações devem ter no máximo 500 caracteres.').optional(),
 });
 
+// Helper para converter dados do Firestore para o tipo ProductionOrder
+function mapDocToProductionOrder(docSnap: any): ProductionOrder {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    ...data,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
+    // startTime e endTime são armazenados como Timestamps ou null/undefined
+    startTime: data.startTime instanceof Timestamp ? data.startTime.toMillis() : data.startTime,
+    endTime: data.endTime instanceof Timestamp ? data.endTime.toMillis() : data.endTime,
+  } as ProductionOrder;
+}
+
 export async function getProductionOrders(): Promise<ProductionOrder[]> {
-  return db.productionOrders.map(po => {
-    const sku = db.skus.find(s => s.id === po.skuId);
-    return { 
-      ...po, 
-      skuCode: sku?.code || 'N/A',
-      createdAt: new Date(po.createdAt),
-      updatedAt: new Date(po.updatedAt),
-      // startTime and endTime are already numbers (timestamps)
-    };
-  }).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
+  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  const poCollection = collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION);
+  const snapshot = await getDocs(poCollection);
+  const orders = snapshot.docs.map(mapDocToProductionOrder);
+  // Carregar skuCode para cada pedido
+  for (const order of orders) {
+    if (order.skuId) {
+        const skuDoc = await getDoc(doc(firestoreDb, SKUS_COLLECTION, order.skuId));
+        if (skuDoc.exists()) {
+            order.skuCode = skuDoc.data()?.code || 'N/A';
+        } else {
+            order.skuCode = 'N/A (Excluído)';
+        }
+    } else {
+        order.skuCode = 'N/A';
+    }
+  }
+  return orders.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function getProductionOrderById(id: string): Promise<ProductionOrder | undefined> {
-  const po = db.productionOrders.find(order => order.id === id);
-  if (po) {
-    const sku = db.skus.find(s => s.id === po.skuId);
-    return { 
-        ...po, 
-        skuCode: sku?.code || 'N/A',
-        createdAt: new Date(po.createdAt),
-        updatedAt: new Date(po.updatedAt),
-    };
+  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  const poDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+  const docSnap = await getDoc(poDocRef);
+  if (docSnap.exists()) {
+    const order = mapDocToProductionOrder(docSnap);
+    if (order.skuId) {
+        const skuDoc = await getDoc(doc(firestoreDb, SKUS_COLLECTION, order.skuId));
+        if (skuDoc.exists()) {
+            order.skuCode = skuDoc.data()?.code || 'N/A';
+        } else {
+            order.skuCode = 'N/A (Excluído)';
+        }
+    } else {
+        order.skuCode = 'N/A';
+    }
+    return order;
   }
   return undefined;
 }
@@ -51,33 +80,44 @@ export async function createProductionOrder(formData: ProductionOrderFormData) {
       message: 'Falha ao criar Pedido de Produção. Verifique os campos.',
     };
   }
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
 
   const { skuId, quantity, notes } = validatedFields.data;
 
-  const sku = db.skus.find(s => s.id === skuId);
-  if (!sku) {
+  const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, skuId);
+  const skuSnap = await getDoc(skuDocRef);
+  if (!skuSnap.exists()) {
     return {
-      errors: { skuId: ['SKU selecionado não é válido.'] },
+      errors: { skuId: ['SKU selecionado não é válido ou não existe.'] },
       message: 'Falha ao criar Pedido de Produção. SKU inválido.',
     };
   }
-
-  const newOrder: ProductionOrder = {
-    id: await generateId('po'),
+  const skuCode = skuSnap.data()?.code || 'N/A';
+  const now = new Date();
+  const newOrderData = {
     skuId,
-    skuCode: sku.code,
+    skuCode, // Denormalizado
     quantity,
     notes: notes || '',
     status: 'open' as ProductionOrderStatus,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
+    startTime: null,
+    endTime: null,
+    totalProductionTime: null,
+    deliveredQuantity: null,
+    secondsPerUnit: null,
   };
 
-  db.productionOrders.unshift(newOrder);
-
-  revalidatePath('/production-orders');
-  revalidatePath('/dashboard'); // Dashboard uses PO data
-  return { message: 'Pedido de Produção criado com sucesso.', order: newOrder };
+  try {
+    const docRef = await addDoc(collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION), newOrderData);
+    revalidatePath('/production-orders');
+    revalidatePath('/dashboard');
+    return { message: 'Pedido de Produção criado com sucesso.', order: { id: docRef.id, ...newOrderData, createdAt: now, updatedAt: now } };
+  } catch (error) {
+    console.error("Error creating Production Order:", error);
+    return { message: 'Erro ao criar Pedido de Produção no banco de dados.', error: true };
+  }
 }
 
 export async function updateProductionOrder(id: string, formData: ProductionOrderFormData) {
@@ -89,182 +129,230 @@ export async function updateProductionOrder(id: string, formData: ProductionOrde
       message: 'Falha ao atualizar Pedido de Produção. Verifique os campos.',
     };
   }
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
 
   const { skuId, quantity, notes } = validatedFields.data;
-  const orderIndex = db.productionOrders.findIndex(order => order.id === id);
+  const orderDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+  const orderSnap = await getDoc(orderDocRef);
 
-  if (orderIndex === -1) {
+  if (!orderSnap.exists()) {
     return { message: 'Pedido de Produção não encontrado.', error: true };
   }
 
-  const sku = db.skus.find(s => s.id === skuId);
-  if (!sku) {
-    return {
-      errors: { skuId: ['SKU selecionado não é válido.'] },
-      message: 'Falha ao atualizar Pedido de Produção. SKU inválido.',
-    };
-  }
-  
-  const currentOrder = db.productionOrders[orderIndex];
-  // Prevent editing of quantity/SKU if order is not 'open'
-  if (currentOrder.status !== 'open' && (currentOrder.skuId !== skuId || currentOrder.quantity !== quantity)) {
-     return { 
-        message: 'SKU e Quantidade só podem ser alterados em pedidos com status "Aberta".', 
-        error: true,
+  const currentOrder = mapDocToProductionOrder(orderSnap);
+  const updates: Partial<ProductionOrder> & { updatedAt: Timestamp } = { updatedAt: Timestamp.fromDate(new Date()) };
+
+  if (currentOrder.status === 'open') {
+    const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, skuId);
+    const skuSnap = await getDoc(skuDocRef);
+    if (!skuSnap.exists()) {
+      return { errors: { skuId: ['SKU selecionado não é válido ou não existe.'] }, message: 'SKU inválido.' };
+    }
+    updates.skuId = skuId;
+    updates.skuCode = skuSnap.data()?.code || 'N/A';
+    updates.quantity = quantity;
+  } else if (currentOrder.skuId !== skuId || currentOrder.quantity !== quantity) {
+    return { 
+        message: 'SKU e Quantidade só podem ser alterados em pedidos com status "Aberta". Apenas observações foram salvas.', 
+        // error: true, // Not a full error if notes can be saved
         errors: { 
-            skuId: currentOrder.skuId !== skuId ? ['SKU não pode ser alterado para pedidos já iniciados.'] : undefined,
-            quantity: currentOrder.quantity !== quantity ? ['Quantidade não pode ser alterada para pedidos já iniciados.'] : undefined,
+            skuId: currentOrder.skuId !== skuId ? ['SKU não pode ser alterado.'] : undefined,
+            quantity: currentOrder.quantity !== quantity ? ['Quantidade não pode ser alterada.'] : undefined,
          }
     };
   }
 
+  if (notes !== undefined) {
+    updates.notes = notes || '';
+  }
+  
+  try {
+    await updateDoc(orderDocRef, updates);
+    revalidatePath('/production-orders');
+    revalidatePath('/dashboard');
+    // Return a representation of the updated order; you might want to refetch for full data
+    const updatedOrder = { ...currentOrder, ...updates, updatedAt: updates.updatedAt.toDate() };
+    if (updates.skuCode) updatedOrder.skuCode = updates.skuCode;
+    if (updates.quantity) updatedOrder.quantity = updates.quantity;
+    if (updates.notes !== undefined) updatedOrder.notes = updates.notes;
 
-  db.productionOrders[orderIndex] = {
-    ...db.productionOrders[orderIndex],
-    skuId,
-    skuCode: sku.code,
-    quantity,
-    notes: notes || db.productionOrders[orderIndex].notes,
-    updatedAt: new Date(),
-  };
-
-  revalidatePath('/production-orders');
-  revalidatePath('/dashboard');
-  return { message: 'Pedido de Produção atualizado com sucesso.', order: db.productionOrders[orderIndex] };
+    return { message: 'Pedido de Produção atualizado com sucesso.', order: updatedOrder };
+  } catch (error) {
+    console.error("Error updating Production Order:", error);
+    return { message: 'Erro ao atualizar Pedido de Produção.', error: true };
+  }
 }
 
 export async function startProductionOrder(id: string) {
-  const orderIndex = db.productionOrders.findIndex(order => order.id === id);
-  if (orderIndex === -1) {
-    return { message: 'Pedido de Produção não encontrado.', error: true };
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  const orderDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+  const orderSnap = await getDoc(orderDocRef);
+
+  if (!orderSnap.exists()) return { message: 'Pedido de Produção não encontrado.', error: true };
+  const orderData = orderSnap.data();
+  if (orderData?.status !== 'open') return { message: 'Apenas pedidos "Abertos" podem ser iniciados.', error: true };
+
+  try {
+    await updateDoc(orderDocRef, {
+      status: 'in_progress',
+      startTime: Timestamp.now(), // Use Firestore Timestamp for consistency
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
+    revalidatePath('/production-orders');
+    revalidatePath('/dashboard');
+    return { message: 'Pedido de Produção iniciado.' };
+  } catch (e) {
+    console.error("Error starting PO:", e);
+    return { message: 'Erro ao iniciar Pedido de Produção.', error: true };
   }
-  if (db.productionOrders[orderIndex].status !== 'open') {
-    return { message: 'Apenas pedidos "Abertos" podem ser iniciados.', error: true };
-  }
-  db.productionOrders[orderIndex].status = 'in_progress';
-  db.productionOrders[orderIndex].startTime = Date.now();
-  db.productionOrders[orderIndex].updatedAt = new Date();
-  revalidatePath('/production-orders');
-  revalidatePath('/dashboard');
-  return { message: 'Pedido de Produção iniciado.' };
 }
 
 export async function completeProductionOrder(id: string, deliveredQuantity: number) {
-  const orderIndex = db.productionOrders.findIndex(order => order.id === id);
-  if (orderIndex === -1) {
-    return { message: 'Pedido de Produção não encontrado.', error: true };
-  }
-  const order = db.productionOrders[orderIndex];
-  if (order.status !== 'in_progress') {
-    return { message: 'Apenas pedidos "Em Progresso" podem ser concluídos.', error: true };
-  }
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  const orderDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+  const orderSnap = await getDoc(orderDocRef);
 
+  if (!orderSnap.exists()) return { message: 'Pedido de Produção não encontrado.', error: true };
+  const orderData = mapDocToProductionOrder(orderSnap); // Use helper to get JS Date for startTime
+
+  if (orderData.status !== 'in_progress') return { message: 'Apenas pedidos "Em Progresso" podem ser concluídos.', error: true };
   if (typeof deliveredQuantity !== 'number' || !Number.isInteger(deliveredQuantity) || deliveredQuantity < 0) {
-    return { message: 'Quantidade entregue fornecida é inválida. Deve ser um número inteiro não negativo.', error: true };
+    return { message: 'Quantidade entregue fornecida é inválida.', error: true };
   }
 
-  order.status = 'completed';
-  order.endTime = Date.now();
-  order.totalProductionTime = order.endTime - (order.startTime || order.endTime); // ensure startTime exists
-  order.deliveredQuantity = deliveredQuantity;
-  order.updatedAt = new Date();
+  const endTime = Timestamp.now();
+  let totalProductionTimeMs: number | null = null;
+  let secondsPerUnitVal: number | null = null;
 
-  if (deliveredQuantity > 0 && order.totalProductionTime && order.totalProductionTime > 0) {
-    order.secondsPerUnit = (order.totalProductionTime / 1000) / deliveredQuantity;
-  } else {
-    order.secondsPerUnit = undefined;
+  if (orderData.startTime) { // startTime is a number (ms) from mapDocToProductionOrder
+    totalProductionTimeMs = endTime.toMillis() - orderData.startTime;
+    if (deliveredQuantity > 0 && totalProductionTimeMs > 0) {
+      secondsPerUnitVal = (totalProductionTimeMs / 1000) / deliveredQuantity;
+    }
   }
 
-  revalidatePath('/production-orders');
-  revalidatePath('/dashboard');
-  revalidatePath('/demand-planning'); // Demand progress depends on completed POs
-  revalidatePath('/performance'); // Performance/ABC curve depends on completed POs
-  return { message: `Pedido de Produção concluído com ${deliveredQuantity} unidades entregues.` };
+  try {
+    await updateDoc(orderDocRef, {
+      status: 'completed',
+      endTime: endTime,
+      totalProductionTime: totalProductionTimeMs,
+      deliveredQuantity: deliveredQuantity,
+      secondsPerUnit: secondsPerUnitVal,
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
+    revalidatePath('/production-orders');
+    revalidatePath('/dashboard');
+    revalidatePath('/demand-planning');
+    revalidatePath('/performance');
+    return { message: `Pedido de Produção concluído com ${deliveredQuantity} unidades entregues.` };
+  } catch (e) {
+    console.error("Error completing PO:", e);
+    return { message: 'Erro ao concluir Pedido de Produção.', error: true };
+  }
 }
 
 export async function cancelProductionOrder(id: string) {
-  const orderIndex = db.productionOrders.findIndex(order => order.id === id);
-  if (orderIndex === -1) {
-    return { message: 'Pedido de Produção não encontrado.', error: true };
-  }
-  const order = db.productionOrders[orderIndex];
-  if (order.status === 'completed' || order.status === 'cancelled') {
-     return { message: `Pedidos "${order.status === 'completed' ? 'Concluídos' : 'Cancelados'}" não podem ser cancelados novamente.`, error: true };
-  }
-  order.status = 'cancelled';
-  order.endTime = Date.now(); // Mark end time for cancellation as well
-  if (order.startTime) { // If it was started, calculate time spent before cancellation
-    order.totalProductionTime = order.endTime - order.startTime;
-  }
-  order.updatedAt = new Date();
-  revalidatePath('/production-orders');
-  revalidatePath('/dashboard');
-  return { message: 'Pedido de Produção cancelado.' };
+    if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+    const orderDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+    const orderSnap = await getDoc(orderDocRef);
+
+    if (!orderSnap.exists()) return { message: 'Pedido de Produção não encontrado.', error: true };
+    const orderData = mapDocToProductionOrder(orderSnap);
+
+    if (orderData.status === 'completed' || orderData.status === 'cancelled') {
+        return { message: `Pedidos "${orderData.status === 'completed' ? 'Concluídos' : 'Cancelados'}" não podem ser cancelados novamente.`, error: true };
+    }
+    
+    const endTime = Timestamp.now();
+    let totalProductionTimeMs: number | null = null;
+    if (orderData.startTime) { // startTime is number (ms)
+        totalProductionTimeMs = endTime.toMillis() - orderData.startTime;
+    }
+
+    try {
+        await updateDoc(orderDocRef, {
+            status: 'cancelled',
+            endTime: endTime,
+            totalProductionTime: totalProductionTimeMs,
+            updatedAt: Timestamp.fromDate(new Date()),
+        });
+        revalidatePath('/production-orders');
+        revalidatePath('/dashboard');
+        return { message: 'Pedido de Produção cancelado.' };
+    } catch (e) {
+        console.error("Error cancelling PO:", e);
+        return { message: 'Erro ao cancelar Pedido de Produção.', error: true };
+    }
 }
 
 export async function deleteProductionOrder(id: string) {
-  const orderIndex = db.productionOrders.findIndex(order => order.id === id);
-  if (orderIndex === -1) {
-    return { message: 'Pedido de Produção não encontrado.', error: true };
-  }
-  if (db.productionOrders[orderIndex].status === 'in_progress') {
-    return { message: 'Pedidos "Em Progresso" não podem ser excluídos. Cancele ou conclua o pedido primeiro.', error: true };
-  }
-  db.productionOrders.splice(orderIndex, 1);
-  revalidatePath('/production-orders');
-  revalidatePath('/dashboard');
-  revalidatePath('/demand-planning'); 
-  revalidatePath('/performance');
-  return { message: 'Pedido de Produção excluído com sucesso.' };
+    if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+    const orderDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+    const orderSnap = await getDoc(orderDocRef);
+
+    if (!orderSnap.exists()) return { message: 'Pedido de Produção não encontrado.', error: true };
+    if (orderSnap.data()?.status === 'in_progress') {
+        return { message: 'Pedidos "Em Progresso" não podem ser excluídos.', error: true };
+    }
+    try {
+        await deleteDoc(orderDocRef);
+        revalidatePath('/production-orders');
+        revalidatePath('/dashboard');
+        revalidatePath('/demand-planning');
+        revalidatePath('/performance');
+        return { message: 'Pedido de Produção excluído com sucesso.' };
+    } catch (e) {
+        console.error("Error deleting PO:", e);
+        return { message: 'Erro ao excluir Pedido de Produção.', error: true };
+    }
 }
 
-
 export async function deleteMultipleProductionOrders(ids: string[]) {
-  if (!ids || ids.length === 0) {
-    return { message: 'Nenhum pedido de produção selecionado para exclusão.', error: true };
-  }
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  if (!ids || ids.length === 0) return { message: 'Nenhum pedido selecionado.', error: true };
 
+  const batch = writeBatch(firestoreDb);
   let deletedCount = 0;
-  const notFoundIds: string[] = [];
   const inProgressIds: string[] = [];
+  const notFoundIds: string[] = [];
 
-  ids.forEach(id => {
-    const orderIndex = db.productionOrders.findIndex(o => o.id === id);
-    if (orderIndex !== -1) {
-      if (db.productionOrders[orderIndex].status === 'in_progress') {
+  for (const id of ids) {
+    const orderDocRef = doc(firestoreDb, PRODUCTION_ORDERS_COLLECTION, id);
+    const orderSnap = await getDoc(orderDocRef);
+    if (orderSnap.exists()) {
+      if (orderSnap.data()?.status === 'in_progress') {
         inProgressIds.push(id);
       } else {
-        db.productionOrders.splice(orderIndex, 1);
+        batch.delete(orderDocRef);
         deletedCount++;
       }
     } else {
       notFoundIds.push(id);
     }
-  });
-
-  let message = '';
-  if (deletedCount > 0) {
-    revalidatePath('/production-orders');
-    revalidatePath('/dashboard');
-    revalidatePath('/demand-planning');
-    revalidatePath('/performance');
-    message += `${deletedCount} pedido(s) excluído(s) com sucesso. `;
   }
 
-  if (inProgressIds.length > 0) {
-    message += `${inProgressIds.length} pedido(s) "Em Progresso" não puderam ser excluído(s). Cancele ou conclua-os primeiro. `;
+  try {
+    await batch.commit();
+    let message = '';
+    if (deletedCount > 0) {
+      message += `${deletedCount} pedido(s) excluído(s). `;
+      revalidatePath('/production-orders');
+      revalidatePath('/dashboard');
+      revalidatePath('/demand-planning');
+      revalidatePath('/performance');
+    }
+    if (inProgressIds.length > 0) {
+      message += `${inProgressIds.length} pedido(s) "Em Progresso" não foram excluídos. `;
+    }
+    if (notFoundIds.length > 0) {
+      message += `${notFoundIds.length} pedido(s) não encontrados.`;
+    }
+     if (message === '') {
+      message = 'Nenhuma operação de exclusão foi realizada.';
+    }
+    return { message: message.trim(), error: inProgressIds.length > 0 || notFoundIds.length > 0 };
+  } catch (error) {
+    console.error("Error deleting multiple POs:", error);
+    return { message: 'Erro ao excluir pedidos em massa.', error: true };
   }
-  if (notFoundIds.length > 0) {
-    message += `${notFoundIds.length} pedido(s) não encontrado(s).`;
-  }
-
-  if (message === '') {
-    message = 'Nenhum pedido foi excluído.';
-  }
-
-  return { 
-    message: message.trim(), 
-    error: inProgressIds.length > 0 || notFoundIds.length > 0 
-  };
 }
-

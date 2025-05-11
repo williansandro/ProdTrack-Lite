@@ -1,10 +1,10 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { Demand, DemandFormData, DemandWithProgress, SKU, ProductionOrder } from '@/lib/types';
-import { db, generateId } from '@/lib/data';
+import { firestoreDb, DEMANDS_COLLECTION, SKUS_COLLECTION, PRODUCTION_ORDERS_COLLECTION, generateId } from '@/lib/data';
+import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { format, parse, getMonth, getYear } from 'date-fns';
 
 const DemandFormSchema = z.object({
@@ -16,43 +16,74 @@ const DemandFormSchema = z.object({
     .positive({ message: 'Quantidade alvo deve ser maior que zero.' }),
 });
 
-export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
-  const demandsWithSkuAndDates = db.demands.map(demand => {
-    const sku = db.skus.find(s => s.id === demand.skuId);
-    return { 
-      ...demand, 
-      skuCode: sku?.code || 'N/A',
-      createdAt: new Date(demand.createdAt),
-      updatedAt: new Date(demand.updatedAt),
-    };
-  });
+// Helper para converter dados do Firestore para o tipo Demand
+function mapDocToDemand(docSnap: any): Demand {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    ...data,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
+  } as Demand;
+}
 
-  const demandsWithProgress = demandsWithSkuAndDates.map(demand => {
+export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
+  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  const demandsCollection = collection(firestoreDb, DEMANDS_COLLECTION);
+  const demandsSnapshot = await getDocs(demandsCollection);
+  const demands = demandsSnapshot.docs.map(mapDocToDemand);
+
+  const demandsWithProgress: DemandWithProgress[] = [];
+
+  for (const demand of demands) {
+    if (demand.skuId) {
+        const skuDoc = await getDoc(doc(firestoreDb, SKUS_COLLECTION, demand.skuId));
+        if (skuDoc.exists()) {
+            demand.skuCode = skuDoc.data()?.code || 'N/A';
+        } else {
+             demand.skuCode = 'N/A (Excluído)';
+        }
+    } else {
+        demand.skuCode = 'N/A';
+    }
+
+
     const [yearStr, monthStr] = demand.monthYear.split('-');
-    const demandMonth = parseInt(monthStr, 10) - 1; // Month is 0-indexed in JS Date
+    const demandMonth = parseInt(monthStr, 10) - 1;
     const demandYear = parseInt(yearStr, 10);
 
-    const producedQuantity = db.productionOrders
-      .filter(po => 
-        po.skuId === demand.skuId &&
-        po.status === 'completed' &&
-        po.endTime && // Ensure there's an end time
-        getMonth(new Date(po.endTime)) === demandMonth && // po.endTime is a timestamp
-        getYear(new Date(po.endTime)) === demandYear &&
-        typeof po.deliveredQuantity === 'number'
-      )
-      .reduce((sum, po) => sum + (po.deliveredQuantity || 0), 0);
+    const poQuery = query(
+      collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION),
+      where("skuId", "==", demand.skuId),
+      where("status", "==", "completed")
+    );
+    const poSnapshot = await getDocs(poQuery);
+    let producedQuantity = 0;
+    poSnapshot.forEach(poDoc => {
+      const poData = poDoc.data();
+      if (poData.endTime && poData.endTime instanceof Timestamp) {
+        const completionDate = poData.endTime.toDate();
+        if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
+          producedQuantity += poData.deliveredQuantity;
+        }
+      } else if (poData.endTime && typeof poData.endTime === 'number') { // Handle if endTime is stored as millis
+         const completionDate = new Date(poData.endTime);
+         if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
+          producedQuantity += poData.deliveredQuantity;
+        }
+      }
+    });
 
-    const progressPercentage = demand.targetQuantity > 0 
-      ? Math.min(100, Math.max(0,(producedQuantity / demand.targetQuantity) * 100)) 
+    const progressPercentage = demand.targetQuantity > 0
+      ? Math.min(100, Math.max(0, (producedQuantity / demand.targetQuantity) * 100))
       : 0;
-      
-    return {
+
+    demandsWithProgress.push({
       ...demand,
       producedQuantity,
       progressPercentage,
-    };
-  });
+    });
+  }
 
   return demandsWithProgress.sort((a,b) => {
     const dateA = parse(a.monthYear, 'yyyy-MM', new Date());
@@ -73,40 +104,42 @@ export async function createDemand(formData: DemandFormData) {
       message: 'Falha ao criar Demanda. Verifique os campos.',
     };
   }
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
 
   const { skuId, monthYear, targetQuantity } = validatedFields.data;
 
-  const sku = db.skus.find(s => s.id === skuId);
-  if (!sku) {
-    return {
-      errors: { skuId: ['SKU selecionado não é válido.'] },
-      message: 'Falha ao criar Demanda. SKU inválido.',
-    };
+  const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, skuId);
+  const skuSnap = await getDoc(skuDocRef);
+  if (!skuSnap.exists()) {
+    return { errors: { skuId: ['SKU selecionado não é válido ou não existe.'] }, message: 'SKU inválido.' };
   }
+  const skuCode = skuSnap.data()?.code || 'N/A';
 
-  // Check for existing demand for the same SKU and monthYear
-  const existingDemand = db.demands.find(d => d.skuId === skuId && d.monthYear === monthYear);
-  if (existingDemand) {
-    return {
-      errors: { monthYear: ['Já existe uma demanda para este SKU e Mês/Ano.'] },
-      message: 'Falha ao criar Demanda. Demanda duplicada.',
-    };
+  const q = query(collection(firestoreDb, DEMANDS_COLLECTION), where("skuId", "==", skuId), where("monthYear", "==", monthYear));
+  const querySnapshot = await getDocs(q);
+  if (!querySnapshot.empty) {
+    return { errors: { monthYear: ['Já existe uma demanda para este SKU e Mês/Ano.'] }, message: 'Demanda duplicada.' };
   }
-
-  const newDemand: Demand = {
-    id: await generateId('dem'),
+  
+  const now = new Date();
+  const newDemandData = {
     skuId,
-    skuCode: sku.code, // Denormalize for easier display
+    skuCode, // Denormalizado
     monthYear,
     targetQuantity,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
   };
 
-  db.demands.unshift(newDemand);
-  revalidatePath('/demand-planning');
-  revalidatePath('/dashboard'); // Dashboard uses demand data
-  return { message: 'Demanda criada com sucesso.', demand: newDemand };
+  try {
+    const docRef = await addDoc(collection(firestoreDb, DEMANDS_COLLECTION), newDemandData);
+    revalidatePath('/demand-planning');
+    revalidatePath('/dashboard');
+    return { message: 'Demanda criada com sucesso.', demand: { id: docRef.id, ...newDemandData, createdAt: now, updatedAt: now } };
+  } catch (error) {
+    console.error("Error creating Demand:", error);
+    return { message: 'Erro ao criar Demanda no banco de dados.', error: true };
+  }
 }
 
 export async function updateDemand(id: string, formData: DemandFormData) {
@@ -118,92 +151,90 @@ export async function updateDemand(id: string, formData: DemandFormData) {
       message: 'Falha ao atualizar Demanda. Verifique os campos.',
     };
   }
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
 
   const { skuId, monthYear, targetQuantity } = validatedFields.data;
-  const demandIndex = db.demands.findIndex(d => d.id === id);
+  const demandDocRef = doc(firestoreDb, DEMANDS_COLLECTION, id);
+  const demandSnap = await getDoc(demandDocRef);
 
-  if (demandIndex === -1) {
+  if (!demandSnap.exists()) {
     return { message: 'Demanda não encontrada.', error: true };
   }
 
-  const sku = db.skus.find(s => s.id === skuId);
-  if (!sku) {
-    return {
-      errors: { skuId: ['SKU selecionado não é válido.'] },
-      message: 'Falha ao atualizar Demanda. SKU inválido.',
-    };
+  const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, skuId);
+  const skuSnap = await getDoc(skuDocRef);
+  if (!skuSnap.exists()) {
+    return { errors: { skuId: ['SKU selecionado não é válido ou não existe.'] }, message: 'SKU inválido.' };
   }
-
-  // Check for existing demand for the same SKU and monthYear if it's being changed
-  const originalDemand = db.demands[demandIndex];
+  const skuCode = skuSnap.data()?.code || 'N/A';
+  
+  const originalDemand = mapDocToDemand(demandSnap);
   if ((originalDemand.skuId !== skuId || originalDemand.monthYear !== monthYear)) {
-    const existingDemand = db.demands.find(d => d.id !== id && d.skuId === skuId && d.monthYear === monthYear);
-    if (existingDemand) {
+    const q = query(collection(firestoreDb, DEMANDS_COLLECTION), where("skuId", "==", skuId), where("monthYear", "==", monthYear));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty && querySnapshot.docs.some(docSnap => docSnap.id !== id)) {
       return {
         errors: { monthYear: ['Já existe outra demanda para este SKU e Mês/Ano.'] },
-        message: 'Falha ao atualizar Demanda. Conflito de SKU e Mês/Ano.',
+        message: 'Conflito de SKU e Mês/Ano.',
       };
     }
   }
-  
 
-  db.demands[demandIndex] = {
-    ...db.demands[demandIndex],
+  const updatedDemandData = {
     skuId,
-    skuCode: sku.code,
+    skuCode,
     monthYear,
     targetQuantity,
-    updatedAt: new Date(),
+    updatedAt: Timestamp.fromDate(new Date()),
   };
 
-  revalidatePath('/demand-planning');
-  revalidatePath('/dashboard');
-  return { message: 'Demanda atualizada com sucesso.', demand: db.demands[demandIndex] };
+  try {
+    await setDoc(demandDocRef, updatedDemandData, { merge: true }); // merge: true para não sobrescrever createdAt
+    revalidatePath('/demand-planning');
+    revalidatePath('/dashboard');
+    return { message: 'Demanda atualizada com sucesso.', demand: { id, ...updatedDemandData, createdAt: originalDemand.createdAt, updatedAt: new Date(updatedDemandData.updatedAt.toDate().getTime()) } };
+  } catch (error) {
+    console.error("Error updating Demand:", error);
+    return { message: 'Erro ao atualizar Demanda.', error: true };
+  }
 }
 
 export async function deleteDemand(id: string) {
-  const demandIndex = db.demands.findIndex(d => d.id === id);
-  if (demandIndex === -1) {
-    return { message: 'Demanda não encontrada.', error: true };
-  }
-
-  db.demands.splice(demandIndex, 1);
-  revalidatePath('/demand-planning');
-  revalidatePath('/dashboard');
-  return { message: 'Demanda excluída com sucesso.' };
-}
-
-
-export async function deleteMultipleDemands(ids: string[]) {
-  if (!ids || ids.length === 0) {
-    return { message: 'Nenhuma demanda selecionada para exclusão.', error: true };
-  }
-
-  let deletedCount = 0;
-  const notFoundIds: string[] = [];
-
-  ids.forEach(id => {
-    const demandIndex = db.demands.findIndex(d => d.id === id);
-    if (demandIndex !== -1) {
-      db.demands.splice(demandIndex, 1);
-      deletedCount++;
-    } else {
-      notFoundIds.push(id);
-    }
-  });
-
-  if (deletedCount > 0) {
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  try {
+    await deleteDoc(doc(firestoreDb, DEMANDS_COLLECTION, id));
     revalidatePath('/demand-planning');
     revalidatePath('/dashboard');
+    return { message: 'Demanda excluída com sucesso.' };
+  } catch (error) {
+    console.error("Error deleting Demand:", error);
+    return { message: 'Erro ao excluir Demanda.', error: true };
   }
-
-  if (notFoundIds.length > 0) {
-    return { 
-      message: `${deletedCount} demanda(s) excluída(s). ${notFoundIds.length} demanda(s) não encontrada(s).`, 
-      error: true 
-    };
-  }
-
-  return { message: `${deletedCount} demanda(s) excluída(s) com sucesso.` };
 }
 
+export async function deleteMultipleDemands(ids: string[]) {
+  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  if (!ids || ids.length === 0) return { message: 'Nenhuma demanda selecionada.', error: true };
+
+  const batch = writeBatch(firestoreDb);
+  let deletedCount = 0;
+
+  for (const id of ids) {
+    const demandDocRef = doc(firestoreDb, DEMANDS_COLLECTION, id);
+    // Poderia adicionar uma verificação se o doc existe, mas o batch.delete não falha se não existir.
+    batch.delete(demandDocRef);
+    deletedCount++;
+  }
+
+  try {
+    await batch.commit();
+    if (deletedCount > 0) {
+      revalidatePath('/demand-planning');
+      revalidatePath('/dashboard');
+    }
+    return { message: `${deletedCount} demanda(s) excluída(s) com sucesso.` };
+  } catch (error) {
+    console.error("Error deleting multiple Demands:", error);
+    return { message: 'Erro ao excluir demandas em massa.', error: true };
+  }
+}

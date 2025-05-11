@@ -1,50 +1,36 @@
 
-import type { SKU, ProductionOrder, Demand } from './types';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, addDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 
-interface DataStore {
-  skus: SKU[];
-  productionOrders: ProductionOrder[];
-  demands: Demand[];
-}
-
-// Helper to generate unique IDs
-export const generateId = async (prefix: string = 'id'): Promise<string> => {
-  // Date.now() and Math.random() are fine for server-side ID generation.
-  // Making this async to satisfy Next.js build checks when this module is imported by server actions.
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
+// SUAS CONFIGURAÇÕES DO FIREBASE AQUI
+// Substitua pelos valores do seu projeto Firebase
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID", // Certifique-se que este é o ID correto do seu projeto
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
-// This function always creates a new store with empty arrays.
-// It's used to initialize the store if it doesn't exist or for production.
-function createEmptyDataStore(): DataStore {
-  return {
-    skus: [],
-    productionOrders: [],
-    demands: [],
-  };
-}
-
-// Augment the global NodeJS namespace to declare our global DB variable
-declare global {
-  // eslint-disable-next-line no-var
-  var __PCP_TRACKER_DB_INSTANCE__: DataStore | undefined;
-}
-
-let db: DataStore;
-
-// Cast globalThis to include our custom property
-const g = globalThis as typeof globalThis & { __PCP_TRACKER_DB_INSTANCE__?: DataStore };
-
-if (process.env.NODE_ENV === 'production') {
-  // In production, always start with a fresh, empty store.
-  db = createEmptyDataStore();
+// Inicializa o Firebase
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
 } else {
-  // In development, we use a global variable to persist the DataStore instance across HMR updates.
-  if (!g.__PCP_TRACKER_DB_INSTANCE__) {
-    g.__PCP_TRACKER_DB_INSTANCE__ = createEmptyDataStore();
-  }
-  db = g.__PCP_TRACKER_DB_INSTANCE__;
+  app = getApp();
 }
 
-export { db };
+export const firestoreDb: Firestore = getFirestore(app);
 
+// Nomes das coleções
+export const SKUS_COLLECTION = 'skus';
+export const PRODUCTION_ORDERS_COLLECTION = 'productionOrders';
+export const DEMANDS_COLLECTION = 'demands';
+
+// Função para gerar ID (opcional, Firestore pode gerar IDs automaticamente com addDoc)
+export const generateId = (): string => {
+  // Cria um DocumentReference temporário em uma coleção fictícia para obter um ID gerado pelo Firestore
+  return doc(collection(firestoreDb, '_temp_id_generator_')).id;
+};

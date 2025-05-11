@@ -1,11 +1,10 @@
-
 export interface SKU {
   id: string;
   code: string;
   description: string;
-  unitOfMeasure: string; // Added unit of measure
-  createdAt: Date;
-  updatedAt: Date;
+  unitOfMeasure: string;
+  createdAt: Date; // Manter como Date no TypeScript, converter para/de Timestamp do Firestore nas actions
+  updatedAt: Date; // Manter como Date no TypeScript
 }
 
 export type ProductionOrderStatus = 'open' | 'in_progress' | 'completed' | 'cancelled';
@@ -13,27 +12,27 @@ export type ProductionOrderStatus = 'open' | 'in_progress' | 'completed' | 'canc
 export interface ProductionOrder {
   id: string;
   skuId: string;
-  skuCode: string; // For display convenience, denormalized
+  skuCode: string; // Denormalizado para exibição
   quantity: number;
   status: ProductionOrderStatus;
-  startTime?: number; // Timestamp (Date.now())
-  endTime?: number; // Timestamp (Date.now())
-  totalProductionTime?: number; // in milliseconds
-  deliveredQuantity?: number; // Actual quantity delivered upon completion
-  secondsPerUnit?: number; // Seconds per unit, calculated on completion
+  startTime?: number | null; // Milliseconds from epoch or null
+  endTime?: number | null;   // Milliseconds from epoch or null
+  totalProductionTime?: number | null; // in milliseconds or null
+  deliveredQuantity?: number | null;
+  secondsPerUnit?: number | null;
   notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date; // Manter como Date
+  updatedAt: Date; // Manter como Date
 }
 
 export interface Demand {
   id: string;
   skuId: string;
-  skuCode: string; // For display convenience
-  monthYear: string; // Format: "YYYY-MM", e.g., "2024-08"
+  skuCode: string; // Denormalizado
+  monthYear: string; // Format: "YYYY-MM"
   targetQuantity: number;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date; // Manter como Date
+  updatedAt: Date; // Manter como Date
 }
 
 export interface DemandWithProgress extends Demand {
@@ -41,20 +40,18 @@ export interface DemandWithProgress extends Demand {
   progressPercentage: number;
 }
 
-// Helper type for form data, typically without id, createdAt, updatedAt
 export type SkuFormData = Omit<SKU, 'id' | 'createdAt' | 'updatedAt'>;
 
-// For ProductionOrderForm - quantity will be string from input, notes is optional
 export type ProductionOrderFormData = {
   skuId: string;
-  quantity: string; // Will be coerced to number
+  quantity: string; 
   notes?: string;
 };
 
 export type DemandFormData = {
   skuId: string;
-  monthYear: string; // Format: "YYYY-MM"
-  targetQuantity: string; // Will be coerced to number
+  monthYear: string; 
+  targetQuantity: string; 
 };
 
 export interface PerformanceSkuData {
@@ -65,4 +62,9 @@ export interface PerformanceSkuData {
   percentageOfTotal: number;
   cumulativePercentage: number;
   abcCategory: 'A' | 'B' | 'C';
+}
+
+// Helper for data.ts generateIdType, not directly used but shows intent
+export interface generateIdType {
+    id: string;
 }
