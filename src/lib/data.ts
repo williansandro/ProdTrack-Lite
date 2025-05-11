@@ -1,8 +1,23 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, addDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  deleteDoc, 
+  addDoc, 
+  updateDoc as updateFirestoreDoc, // Renamed to avoid conflict
+  writeBatch, 
+  Timestamp, 
+  serverTimestamp,
+  query,
+  where
+} from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
-import type { SKU, ProductionOrder, Demand, generateIdType } from './types'; // Adicionado generateIdType
+import type { SKU, ProductionOrder, Demand, generateIdType } from './types';
 
 // =====================================================================================
 // !! IMPORTANTE !! ATUALIZE COM SUAS CREDENCIAIS DO FIREBASE !! IMPORTANTE !!
@@ -45,7 +60,6 @@ const firebaseConfig = {
 // Alguns serviços ou limites de uso do Firebase podem exigir que o faturamento esteja habilitado.
 // =====================================================================================
 
-
 // Inicializa o Firebase
 let app;
 if (!getApps().length) {
@@ -61,6 +75,7 @@ export const SKUS_COLLECTION = 'skus';
 export const PRODUCTION_ORDERS_COLLECTION = 'productionOrders';
 export const DEMANDS_COLLECTION = 'demands';
 
+
 // Funções Genéricas para CRUD no Firestore
 
 /**
@@ -70,7 +85,8 @@ export const DEMANDS_COLLECTION = 'demands';
  */
 export async function readCollection<T extends { id: string }>(collectionName: string): Promise<T[]> {
   if (!firestoreDb) throw new Error("Firestore not initialized.");
-  const querySnapshot = await getDocs(collection(firestoreDb, collectionName));
+  const q = query(collection(firestoreDb, collectionName));
+  const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(docSnap => {
     const data = docSnap.data();
     return {
@@ -121,6 +137,7 @@ export async function createDocument<T extends { id: string; createdAt: Date; up
   if (!firestoreDb) throw new Error("Firestore not initialized.");
   const now = Timestamp.now();
   
+  // Firestore will auto-generate an ID for the new document
   const docRef = await addDoc(collection(firestoreDb, collectionName), {
     ...data,
     createdAt: data.createdAt instanceof Date ? Timestamp.fromDate(data.createdAt) : (data.createdAt || now),
@@ -129,10 +146,11 @@ export async function createDocument<T extends { id: string; createdAt: Date; up
   return {
     id: docRef.id, 
     ...data,
-    createdAt: (data.createdAt instanceof Date ? data.createdAt : (data.createdAt as Timestamp || now).toDate()),
-    updatedAt: (data.updatedAt instanceof Date ? data.updatedAt : (data.updatedAt as Timestamp || now).toDate()),
+    createdAt: (data.createdAt instanceof Date ? data.createdAt : ((data.createdAt as Timestamp) || now).toDate()),
+    updatedAt: (data.updatedAt instanceof Date ? data.updatedAt : ((data.updatedAt as Timestamp) || now).toDate()),
   } as T;
 }
+
 
 /**
  * Atualiza um documento existente em uma coleção.
@@ -142,14 +160,14 @@ export async function createDocument<T extends { id: string; createdAt: Date; up
  * @param data Dados a serem mesclados/atualizados.
  * @returns Promise resolvida quando a atualização for concluída.
  */
-export async function updateDocument<T>(
+export async function updateDocument<T>( // General updateDocument
   collectionName: string,
   id: string,
-  data: Partial<Omit<T, 'id' | 'createdAt' | 'updatedAt'>> // Não permite atualizar id, createdAt
+  data: Partial<Omit<T, 'id' | 'createdAt'>> // Não permite atualizar id, createdAt
 ): Promise<void> {
   if (!firestoreDb) throw new Error("Firestore not initialized.");
   const docRef = doc(firestoreDb, collectionName, id);
-  await updateDoc(docRef, {
+  await updateFirestoreDoc(docRef, { // Use the aliased import
     ...data,
     updatedAt: Timestamp.now(),
   });
@@ -194,8 +212,10 @@ export const generateId = (): string => {
   return doc(collection(firestoreDb, '_temp_id_generator_')).id;
 };
 
+
 // Exportações específicas para cada tipo de dado (SKU, ProductionOrder, Demand)
 // permanecem nos seus respectivos arquivos de actions (sku.actions.ts, etc.)
 // Este arquivo (data.ts) agora foca na configuração do Firebase e funções genéricas de CRUD.
 
-
+// Export serverTimestamp and Timestamp if needed by actions files directly
+export { serverTimestamp, Timestamp };

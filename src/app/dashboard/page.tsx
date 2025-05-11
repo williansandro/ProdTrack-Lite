@@ -8,6 +8,7 @@ import { getProductionOrders } from "@/lib/actions/production-order.actions";
 import { getDemandsWithProgress } from "@/lib/actions/demand.actions";
 import { format, parse, getMonth, getYear, startOfMonth, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export const dynamic = 'force-dynamic'; // Ensures the page is always dynamically rendered
 
@@ -26,9 +27,30 @@ const chartConfigMonthlyProduction = {
 };
 
 export default async function DashboardPage() {
-  const skus = await getSkus();
-  const productionOrders = await getProductionOrders();
-  const demandsWithProgress = await getDemandsWithProgress();
+  let skus, productionOrders, demandsWithProgress;
+
+  try {
+    skus = await getSkus();
+    productionOrders = await getProductionOrders();
+    demandsWithProgress = await getDemandsWithProgress();
+  } catch (error: any) {
+    console.error("Error fetching data for DashboardPage:", error);
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="text-3xl font-bold tracking-tight">Painel de Controle</h1>
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Erro ao Carregar o Painel</AlertTitle>
+          <AlertDescription>
+            Não foi possível buscar os dados necessários para o painel. 
+            Por favor, verifique sua conexão com a internet e as configurações do Firebase.
+            Se o problema persistir, contate o suporte.
+            <p className="mt-2 text-xs">Detalhes do erro: {error.message}</p>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   // 1. Calculate Summary Card Stats
   const totalSkus = skus.length;
@@ -133,7 +155,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pedidos em Andamento</CardTitle>
-            <CheckCircle2 className="h-5 w-5 text-yellow-500" /> {/* Emulating chart-2 color more directly */}
+            <CheckCircle2 className="h-5 w-5 text-yellow-500" /> 
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{inProgressOrders}</div>
@@ -161,4 +183,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-
