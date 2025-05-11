@@ -53,7 +53,7 @@ export async function createSku(formData: SkuFormData) {
   }
 
   const newSku: SKU = {
-    id: generateId('sku'),
+    id: await generateId('sku'),
     code,
     description,
     unitOfMeasure,

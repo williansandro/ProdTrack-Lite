@@ -94,7 +94,7 @@ export async function createDemand(formData: DemandFormData) {
   }
 
   const newDemand: Demand = {
-    id: generateId('dem'),
+    id: await generateId('dem'),
     skuId,
     skuCode: sku.code, // Denormalize for easier display
     monthYear,

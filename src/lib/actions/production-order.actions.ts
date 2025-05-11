@@ -63,7 +63,7 @@ export async function createProductionOrder(formData: ProductionOrderFormData) {
   }
 
   const newOrder: ProductionOrder = {
-    id: generateId('po'),
+    id: await generateId('po'),
     skuId,
     skuCode: sku.code,
     quantity,
@@ -177,6 +177,8 @@ export async function completeProductionOrder(id: string, deliveredQuantity: num
 
   revalidatePath('/production-orders');
   revalidatePath('/dashboard');
+  revalidatePath('/demand-planning'); // Demand progress depends on completed POs
+  revalidatePath('/performance'); // Performance/ABC curve depends on completed POs
   return { message: `Pedido de Produção concluído com ${deliveredQuantity} unidades entregues.` };
 }
 
@@ -211,6 +213,8 @@ export async function deleteProductionOrder(id: string) {
   db.productionOrders.splice(orderIndex, 1);
   revalidatePath('/production-orders');
   revalidatePath('/dashboard');
+  revalidatePath('/demand-planning'); 
+  revalidatePath('/performance');
   return { message: 'Pedido de Produção excluído com sucesso.' };
 }
 
@@ -242,6 +246,8 @@ export async function deleteMultipleProductionOrders(ids: string[]) {
   if (deletedCount > 0) {
     revalidatePath('/production-orders');
     revalidatePath('/dashboard');
+    revalidatePath('/demand-planning');
+    revalidatePath('/performance');
     message += `${deletedCount} pedido(s) excluído(s) com sucesso. `;
   }
 

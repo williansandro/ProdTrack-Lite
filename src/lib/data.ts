@@ -8,7 +8,11 @@ interface DataStore {
 }
 
 // Helper to generate unique IDs
-export const generateId = (prefix: string = 'id') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
+export const generateId = async (prefix: string = 'id'): Promise<string> => {
+  // Date.now() and Math.random() are fine for server-side ID generation.
+  // Making this async to satisfy Next.js build checks when this module is imported by server actions.
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
+};
 
 // This function always creates a new store with empty arrays.
 // It's used to initialize the store if it doesn't exist or for production.
@@ -33,22 +37,14 @@ const g = globalThis as typeof globalThis & { __PCP_TRACKER_DB_INSTANCE__?: Data
 
 if (process.env.NODE_ENV === 'production') {
   // In production, always start with a fresh, empty store.
-  // For actual persistence in production, a real database solution (e.g., Firebase Firestore, Supabase, PostgreSQL) should be used.
   db = createEmptyDataStore();
 } else {
   // In development, we use a global variable to persist the DataStore instance across HMR updates.
-  // This ensures that data entered during a dev session is not lost on file changes/reloads.
   if (!g.__PCP_TRACKER_DB_INSTANCE__) {
-    // If the global instance doesn't exist (e.g., on first server start),
-    // initialize it with an empty store.
-    // console.log('Development: Initializing new empty in-memory database for this session.');
     g.__PCP_TRACKER_DB_INSTANCE__ = createEmptyDataStore();
-  } else {
-    // If it exists, re-use it.
-    // console.log('Development: Re-using existing in-memory database for this session.');
   }
-  // Assign the (potentially existing) global instance to our exported 'db'.
   db = g.__PCP_TRACKER_DB_INSTANCE__;
 }
 
 export { db };
+
