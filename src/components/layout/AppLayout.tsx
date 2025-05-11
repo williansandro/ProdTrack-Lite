@@ -46,7 +46,7 @@ const navItems = [
 // Mock user data as per image
 const MOCKED_USER = {
   name: "williansandro6",
-  avatarUrl: "https://picsum.photos/40/40", // data-ai-hint="user avatar"
+  avatarUrl: "https://avatar.vercel.sh/williansandro6.png", // data-ai-hint="user avatar"
 };
 
 export function AppLayout({ children }: AppLayoutProps) {

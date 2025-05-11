@@ -9,6 +9,8 @@ import { getDemandsWithProgress } from "@/lib/actions/demand.actions";
 import { format, parse, getMonth, getYear, startOfMonth, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+export const dynamic = 'force-dynamic'; // Ensures the page is always dynamically rendered
+
 // Chart configurations remain, as they define colors and labels
 const chartConfigProductionStatus = {
   count: { label: "Pedidos" },
@@ -94,29 +96,13 @@ export default async function DashboardPage() {
     }
   });
 
-  const actualMonthlyProductionData = Object.entries(monthlyDataAggregated)
-    .map(([monthYear, data]) => ({
-      month: data.monthLabel, // "Jan", "Fev", etc.
-      produced: data.produced,
-      target: data.target,
-    }))
-    .sort((a,b) => { // Ensure correct month order if not relying on object insertion order
-        const dateA = parse(a.month, "MMM", new Date(), { locale: ptBR });
-        const dateB = parse(b.month, "MMM", new Date(), { locale: ptBR });
-        // This sort might be tricky if spanning year boundary; a full date parse might be better
-        // Or sort by the key 'monthYear' before mapping if that was available
-        return subMonths(currentDate, N_MONTHS_HISTORY - 1 - Object.keys(monthlyDataAggregated).indexOf(Object.keys(monthlyDataAggregated).find(key => monthlyDataAggregated[key].monthLabel === a.month)!))
-        .getTime() -
-        subMonths(currentDate, N_MONTHS_HISTORY - 1 - Object.keys(monthlyDataAggregated).indexOf(Object.keys(monthlyDataAggregated).find(key => monthlyDataAggregated[key].monthLabel === b.month)!))
-        .getTime();
-    });
-    // A simpler sort: rely on the initial ordered creation of monthlyDataAggregated keys
-    const orderedMonthKeys = Object.keys(monthlyDataAggregated).sort((a,b) => new Date(a).getTime() - new Date(b).getTime());
-    const finalMonthlyProductionData = orderedMonthKeys.map(key => ({
-        month: monthlyDataAggregated[key].monthLabel,
-        produced: monthlyDataAggregated[key].produced,
-        target: monthlyDataAggregated[key].target,
-    }));
+  // A simpler sort: rely on the initial ordered creation of monthlyDataAggregated keys
+  const orderedMonthKeys = Object.keys(monthlyDataAggregated).sort((a,b) => new Date(a+'-01').getTime() - new Date(b + '-01').getTime());
+  const finalMonthlyProductionData = orderedMonthKeys.map(key => ({
+      month: monthlyDataAggregated[key].monthLabel,
+      produced: monthlyDataAggregated[key].produced,
+      target: monthlyDataAggregated[key].target,
+  }));
 
 
   return (
@@ -147,8 +133,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pedidos em Andamento</CardTitle>
-             {/* Using text-yellow-500 as inProgress is chart-2 which is Teal. This is for icon consistency. */}
-            <CheckCircle2 className="h-5 w-5 text-yellow-500" />
+            <CheckCircle2 className="h-5 w-5 text-yellow-500" /> {/* Emulating chart-2 color more directly */}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{inProgressOrders}</div>
@@ -162,7 +147,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{criticalDemands}</div>
-            <p className="text-xs text-muted-foreground">Demandas que necessitam de atenção urgente</p>
+            <p className="text-xs text-muted-foreground">Demandas com atenção urgente</p>
           </CardContent>
         </Card>
       </div>
@@ -176,3 +161,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+
