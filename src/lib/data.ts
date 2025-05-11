@@ -21,16 +21,17 @@ import type { SKU, ProductionOrder, Demand, generateIdType } from './types';
 
 // =====================================================================================
 // !! IMPORTANTE !! ATUALIZE COM SUAS CREDENCIAIS DO FIREBASE !! IMPORTANTE !!
-// !! IMPORTANTE !! O ERRO "PERMISSION_DENIED" OCORRE SE ESTES VALORES NÃO FOREM OS CORRETOS DO SEU PROJETO !!
+// !! SE ESTES VALORES NÃO FOREM OS CORRETOS DO SEU PROJETO FIREBASE, OS DADOS NÃO SERÃO SALVOS! !!
+// !! O ERRO "PERMISSION_DENIED" OU "Could not reach Cloud Firestore backend" OCORRE SE ESTES VALORES ESTIVEREM INCORRETOS !!
 // !!            >>>>>  SUBSTITUA "YOUR_PROJECT_ID" E OUTROS PLACEHOLDERS ABAIXO <<<<<
 // =====================================================================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", // SUBSTITUA PELO SEU API KEY
-  authDomain: "YOUR_AUTH_DOMAIN", // SUBSTITUA PELO SEU AUTH DOMAIN
+  apiKey: "YOUR_API_KEY", // SUBSTITUA PELO SEU API KEY REAL
+  authDomain: "YOUR_AUTH_DOMAIN", // SUBSTITUA PELO SEU AUTH DOMAIN REAL
   projectId: "YOUR_PROJECT_ID", // SUBSTITUA PELO SEU PROJECT ID REAL
-  storageBucket: "YOUR_STORAGE_BUCKET", // SUBSTITUA PELO SEU STORAGE BUCKET
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // SUBSTITUA PELO SEU MESSAGING SENDER ID
-  appId: "YOUR_APP_ID" // SUBSTITUA PELO SEU APP ID
+  storageBucket: "YOUR_STORAGE_BUCKET", // SUBSTITUA PELO SEU STORAGE BUCKET REAL
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // SUBSTITUA PELO SEU MESSAGING SENDER ID REAL
+  appId: "YOUR_APP_ID" // SUBSTITUA PELO SEU APP ID REAL
 };
 // =====================================================================================
 // !! IMPORTANTE !! VERIFIQUE SUAS REGRAS DE SEGURANÇA DO FIRESTORE !! IMPORTANTE !!
@@ -41,7 +42,7 @@ const firebaseConfig = {
 // service cloud.firestore {
 //   match /databases/{database}/documents {
 //     match /{document=**} {
-//       allow read, write: if true; // CUIDADO: MUDE PARA PRODUÇÃO!
+//       allow read, write: if true; // CUIDADO: MUDE PARA PRODUÇÃO! PERMITE QUALQUER UM LER E ESCREVER.
 //     }
 //   }
 // }
@@ -50,25 +51,40 @@ const firebaseConfig = {
 // rules_version = '2';
 // service cloud.firestore {
 //   match /databases/{database}/documents {
-//     match /{document=**} {
-//       allow read, write: if request.auth != null; // Permite acesso apenas para usuários autenticados
+//     // Permite acesso apenas para usuários autenticados aos seus próprios dados
+//     // match /users/{userId}/{document=**} {
+//     //   allow read, write: if request.auth != null && request.auth.uid == userId;
+//     // }
+//     // Exemplo para coleções públicas se necessário, ou mais granular
+//     match /{document=**} { // Regra geral para outras coleções se não especificadas acima
+//       allow read, write: if request.auth != null; // Exemplo: permite acesso se autenticado
 //     }
 //   }
 // }
 // =====================================================================================
 // !! IMPORTANTE !! VERIFIQUE SE O FATURAMENTO ESTÁ ATIVADO NO SEU PROJETO GOOGLE CLOUD !!
 // Alguns serviços ou limites de uso do Firebase podem exigir que o faturamento esteja habilitado.
+// Se o faturamento não estiver ativo, o Firestore pode não funcionar.
 // =====================================================================================
+
 
 // Inicializa o Firebase
 let app;
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
+let firestoreDb: Firestore;
+
+try {
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
+  }
+  firestoreDb = getFirestore(app);
+} catch (error) {
+  console.error("Erro ao inicializar o Firebase. Verifique sua configuração 'firebaseConfig':", error);
+  // @ts-ignore
+  firestoreDb = undefined; // Define como undefined para que as operações falhem controladamente
 }
 
-export const firestoreDb: Firestore = getFirestore(app);
 
 // Nomes das coleções
 export const SKUS_COLLECTION = 'skus';
@@ -84,7 +100,10 @@ export const DEMANDS_COLLECTION = 'demands';
  * @returns Promise com um array de documentos.
  */
 export async function readCollection<T extends { id: string }>(collectionName: string): Promise<T[]> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    console.error("Firestore não inicializado. Verifique a configuração e a conexão.");
+    return []; // Retorna array vazio para evitar que a aplicação quebre completamente
+  }
   const q = query(collection(firestoreDb, collectionName));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(docSnap => {
@@ -93,8 +112,8 @@ export async function readCollection<T extends { id: string }>(collectionName: s
         id: docSnap.id,
         ...data,
         // Converte Timestamps para Dates, se existirem e forem válidos
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt) : new Date()),
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt && typeof data.createdAt.seconds === 'number' ? new Date(data.createdAt.seconds * 1000) : new Date()),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt && typeof data.updatedAt.seconds === 'number' ? new Date(data.updatedAt.seconds * 1000) : new Date()),
     } as T;
   });
 }
@@ -106,7 +125,10 @@ export async function readCollection<T extends { id: string }>(collectionName: s
  * @returns Promise com o documento ou undefined se não encontrado.
  */
 export async function readDocument<T extends { id: string }>(collectionName: string, id: string): Promise<T | undefined> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    console.error("Firestore não inicializado. Verifique a configuração e a conexão.");
+    return undefined;
+  }
   const docRef = doc(firestoreDb, collectionName, id);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
@@ -114,8 +136,8 @@ export async function readDocument<T extends { id: string }>(collectionName: str
     return {
       id: docSnap.id,
       ...data,
-      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
-      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt) : new Date()),
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt && typeof data.createdAt.seconds === 'number' ? new Date(data.createdAt.seconds * 1000) : new Date()),
+      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt && typeof data.updatedAt.seconds === 'number' ? new Date(data.updatedAt.seconds * 1000) : new Date()),
     } as T;
   }
   return undefined;
@@ -134,20 +156,24 @@ export async function createDocument<T extends { id: string; createdAt: Date; up
   collectionName: string,
   data: Omit<T, 'id' | 'createdAt' | 'updatedAt'> & Partial<Pick<T, 'createdAt' | 'updatedAt'>>
 ): Promise<T> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    throw new Error("Firestore não inicializado. Verifique a configuração e a conexão.");
+  }
   const now = Timestamp.now();
   
-  // Firestore will auto-generate an ID for the new document
-  const docRef = await addDoc(collection(firestoreDb, collectionName), {
+  const docDataForFirebase = {
     ...data,
     createdAt: data.createdAt instanceof Date ? Timestamp.fromDate(data.createdAt) : (data.createdAt || now),
     updatedAt: data.updatedAt instanceof Date ? Timestamp.fromDate(data.updatedAt) : (data.updatedAt || now),
-  });
+  };
+  
+  const docRef = await addDoc(collection(firestoreDb, collectionName), docDataForFirebase);
+
   return {
     id: docRef.id, 
     ...data,
-    createdAt: (data.createdAt instanceof Date ? data.createdAt : ((data.createdAt as Timestamp) || now).toDate()),
-    updatedAt: (data.updatedAt instanceof Date ? data.updatedAt : ((data.updatedAt as Timestamp) || now).toDate()),
+    createdAt: (docDataForFirebase.createdAt as Timestamp).toDate(),
+    updatedAt: (docDataForFirebase.updatedAt as Timestamp).toDate(),
   } as T;
 }
 
@@ -160,14 +186,16 @@ export async function createDocument<T extends { id: string; createdAt: Date; up
  * @param data Dados a serem mesclados/atualizados.
  * @returns Promise resolvida quando a atualização for concluída.
  */
-export async function updateDocument<T>( // General updateDocument
+export async function updateDocument<T>( 
   collectionName: string,
   id: string,
-  data: Partial<Omit<T, 'id' | 'createdAt'>> // Não permite atualizar id, createdAt
+  data: Partial<Omit<T, 'id' | 'createdAt'>> 
 ): Promise<void> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    throw new Error("Firestore não inicializado. Verifique a configuração e a conexão.");
+  }
   const docRef = doc(firestoreDb, collectionName, id);
-  await updateFirestoreDoc(docRef, { // Use the aliased import
+  await updateFirestoreDoc(docRef, { 
     ...data,
     updatedAt: Timestamp.now(),
   });
@@ -181,7 +209,9 @@ export async function updateDocument<T>( // General updateDocument
  * @returns Promise resolvida quando a exclusão for concluída.
  */
 export async function deleteFirestoreDocument(collectionName: string, id: string): Promise<void> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    throw new Error("Firestore não inicializado. Verifique a configuração e a conexão.");
+  }
   const docRef = doc(firestoreDb, collectionName, id);
   await deleteDoc(docRef);
 }
@@ -193,7 +223,9 @@ export async function deleteFirestoreDocument(collectionName: string, id: string
  * @returns Promise resolvida quando a exclusão em lote for concluída.
  */
 export async function deleteMultipleDocuments(collectionName: string, ids: string[]): Promise<void> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    throw new Error("Firestore não inicializado. Verifique a configuração e a conexão.");
+  }
   if (ids.length === 0) return;
 
   const batch = writeBatch(firestoreDb);
@@ -204,18 +236,11 @@ export async function deleteMultipleDocuments(collectionName: string, ids: strin
   await batch.commit();
 }
 
-// Função para gerar ID (opcional, Firestore pode gerar IDs automaticamente com addDoc)
-// Se for usar addDoc, esta função não é estritamente necessária para a criação.
+
 export const generateId = (): string => {
-  // Cria um DocumentReference temporário em uma coleção fictícia para obter um ID gerado pelo Firestore
   if (!firestoreDb) throw new Error("Firestore not initialized when generating ID.");
   return doc(collection(firestoreDb, '_temp_id_generator_')).id;
 };
 
 
-// Exportações específicas para cada tipo de dado (SKU, ProductionOrder, Demand)
-// permanecem nos seus respectivos arquivos de actions (sku.actions.ts, etc.)
-// Este arquivo (data.ts) agora foca na configuração do Firebase e funções genéricas de CRUD.
-
-// Export serverTimestamp and Timestamp if needed by actions files directly
-export { serverTimestamp, Timestamp };
+export { serverTimestamp, Timestamp, firestoreDb };

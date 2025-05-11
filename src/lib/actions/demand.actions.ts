@@ -3,8 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { Demand, DemandFormData, DemandWithProgress, SKU, ProductionOrder } from '@/lib/types';
-import { firestoreDb, DEMANDS_COLLECTION, SKUS_COLLECTION, PRODUCTION_ORDERS_COLLECTION, generateId } from '@/lib/data';
-import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { 
+  DEMANDS_COLLECTION, 
+  SKUS_COLLECTION, 
+  PRODUCTION_ORDERS_COLLECTION, 
+  firestoreDb, // Import firestoreDb
+  generateId, 
+  Timestamp 
+} from '@/lib/data';
+import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore'; // serverTimestamp removido
 import { format, parse, getMonth, getYear } from 'date-fns';
 
 const DemandFormSchema = z.object({
@@ -22,22 +29,26 @@ function mapDocToDemand(docSnap: any): Demand {
   return {
     id: docSnap.id,
     ...data,
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt?.seconds * 1000 || Date.now()),
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt?.seconds * 1000 || Date.now()),
   } as Demand;
 }
 
 export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
-  const demandsCollection = collection(firestoreDb, DEMANDS_COLLECTION);
-  const demandsSnapshot = await getDocs(demandsCollection);
+  if (!firestoreDb) {
+    console.error("Firestore não inicializado em getDemandsWithProgress. Verifique a configuração do Firebase.");
+    return [];
+  }
+  const demandsCollectionRef = collection(firestoreDb, DEMANDS_COLLECTION);
+  const demandsSnapshot = await getDocs(demandsCollectionRef);
   const demands = demandsSnapshot.docs.map(mapDocToDemand);
 
   const demandsWithProgress: DemandWithProgress[] = [];
 
   for (const demand of demands) {
     if (demand.skuId) {
-        const skuDoc = await getDoc(doc(firestoreDb, SKUS_COLLECTION, demand.skuId));
+        const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, demand.skuId);
+        const skuDoc = await getDoc(skuDocRef);
         if (skuDoc.exists()) {
             demand.skuCode = skuDoc.data()?.code || 'N/A';
         } else {
@@ -46,7 +57,6 @@ export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
     } else {
         demand.skuCode = 'N/A';
     }
-
 
     const [yearStr, monthStr] = demand.monthYear.split('-');
     const demandMonth = parseInt(monthStr, 10) - 1;
@@ -61,12 +71,13 @@ export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
     let producedQuantity = 0;
     poSnapshot.forEach(poDoc => {
       const poData = poDoc.data();
+      // Ensure endTime is a Firestore Timestamp before converting
       if (poData.endTime && poData.endTime instanceof Timestamp) {
         const completionDate = poData.endTime.toDate();
         if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
           producedQuantity += poData.deliveredQuantity;
         }
-      } else if (poData.endTime && typeof poData.endTime === 'number') { // Handle if endTime is stored as millis
+      } else if (poData.endTime && typeof poData.endTime === 'number') { // Handle if endTime is stored as millis (fallback)
          const completionDate = new Date(poData.endTime);
          if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
           producedQuantity += poData.deliveredQuantity;
@@ -96,6 +107,9 @@ export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
 }
 
 export async function createDemand(formData: DemandFormData) {
+  if (!firestoreDb) {
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
+  }
   const validatedFields = DemandFormSchema.safeParse(formData);
 
   if (!validatedFields.success) {
@@ -104,7 +118,6 @@ export async function createDemand(formData: DemandFormData) {
       message: 'Falha ao criar Demanda. Verifique os campos.',
     };
   }
-  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
 
   const { skuId, monthYear, targetQuantity } = validatedFields.data;
 
@@ -124,7 +137,7 @@ export async function createDemand(formData: DemandFormData) {
   const now = new Date();
   const newDemandData = {
     skuId,
-    skuCode, // Denormalizado
+    skuCode, 
     monthYear,
     targetQuantity,
     createdAt: Timestamp.fromDate(now),
@@ -137,12 +150,15 @@ export async function createDemand(formData: DemandFormData) {
     revalidatePath('/dashboard');
     return { message: 'Demanda criada com sucesso.', demand: { id: docRef.id, ...newDemandData, createdAt: now, updatedAt: now } };
   } catch (error) {
-    console.error("Error creating Demand:", error);
-    return { message: 'Erro ao criar Demanda no banco de dados.', error: true };
+    console.error("Error creating Demand in Firestore:", error);
+    return { message: 'Erro ao criar Demanda no banco de dados. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
 
 export async function updateDemand(id: string, formData: DemandFormData) {
+  if (!firestoreDb) {
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
+  }
   const validatedFields = DemandFormSchema.safeParse(formData);
 
   if (!validatedFields.success) {
@@ -151,7 +167,6 @@ export async function updateDemand(id: string, formData: DemandFormData) {
       message: 'Falha ao atualizar Demanda. Verifique os campos.',
     };
   }
-  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
 
   const { skuId, monthYear, targetQuantity } = validatedFields.data;
   const demandDocRef = doc(firestoreDb, DEMANDS_COLLECTION, id);
@@ -189,31 +204,43 @@ export async function updateDemand(id: string, formData: DemandFormData) {
   };
 
   try {
-    await setDoc(demandDocRef, updatedDemandData, { merge: true }); // merge: true para não sobrescrever createdAt
+    await setDoc(demandDocRef, updatedDemandData, { merge: true }); 
     revalidatePath('/demand-planning');
     revalidatePath('/dashboard');
-    return { message: 'Demanda atualizada com sucesso.', demand: { id, ...updatedDemandData, createdAt: originalDemand.createdAt, updatedAt: new Date(updatedDemandData.updatedAt.toDate().getTime()) } };
+    return { 
+        message: 'Demanda atualizada com sucesso.', 
+        demand: { 
+            id, 
+            ...originalDemand, // Keep original createdAt
+            ...updatedDemandData, 
+            updatedAt: updatedDemandData.updatedAt.toDate() 
+        } 
+    };
   } catch (error) {
-    console.error("Error updating Demand:", error);
-    return { message: 'Erro ao atualizar Demanda.', error: true };
+    console.error("Error updating Demand in Firestore:", error);
+    return { message: 'Erro ao atualizar Demanda. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
 
 export async function deleteDemand(id: string) {
-  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  if (!firestoreDb) {
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
+  }
   try {
     await deleteDoc(doc(firestoreDb, DEMANDS_COLLECTION, id));
     revalidatePath('/demand-planning');
     revalidatePath('/dashboard');
     return { message: 'Demanda excluída com sucesso.' };
   } catch (error) {
-    console.error("Error deleting Demand:", error);
-    return { message: 'Erro ao excluir Demanda.', error: true };
+    console.error("Error deleting Demand from Firestore:", error);
+    return { message: 'Erro ao excluir Demanda. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
 
 export async function deleteMultipleDemands(ids: string[]) {
-  if (!firestoreDb) return { message: 'Erro de conexão com o banco de dados.', error: true };
+  if (!firestoreDb) {
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
+  }
   if (!ids || ids.length === 0) return { message: 'Nenhuma demanda selecionada.', error: true };
 
   const batch = writeBatch(firestoreDb);
@@ -221,7 +248,6 @@ export async function deleteMultipleDemands(ids: string[]) {
 
   for (const id of ids) {
     const demandDocRef = doc(firestoreDb, DEMANDS_COLLECTION, id);
-    // Poderia adicionar uma verificação se o doc existe, mas o batch.delete não falha se não existir.
     batch.delete(demandDocRef);
     deletedCount++;
   }
@@ -234,7 +260,7 @@ export async function deleteMultipleDemands(ids: string[]) {
     }
     return { message: `${deletedCount} demanda(s) excluída(s) com sucesso.` };
   } catch (error) {
-    console.error("Error deleting multiple Demands:", error);
-    return { message: 'Erro ao excluir demandas em massa.', error: true };
+    console.error("Error deleting multiple Demands from Firestore:", error);
+    return { message: 'Erro ao excluir demandas em massa. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }

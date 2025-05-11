@@ -3,8 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { SKU, SkuFormData } from '@/lib/types';
-import { firestoreDb, SKUS_COLLECTION, generateId } from '@/lib/data';
-import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch, Timestamp } from 'firebase/firestore';
+import { 
+  SKUS_COLLECTION, 
+  PRODUCTION_ORDERS_COLLECTION, 
+  DEMANDS_COLLECTION,
+  firestoreDb, // Import firestoreDb
+  generateId, 
+  Timestamp 
+} from '@/lib/data'; // generateId e Timestamp são de @/lib/data
+import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 
 const SkuSchema = z.object({
   code: z.string().min(1, { message: 'Código é obrigatório.' }).max(50),
@@ -18,21 +25,27 @@ function mapDocToSku(docSnap: any): SKU {
   return {
     id: docSnap.id,
     ...data,
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.createdAt),
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt?.seconds * 1000 || Date.now()),
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt?.seconds * 1000 || Date.now()),
   } as SKU;
 }
 
 export async function getSkus(): Promise<SKU[]> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
-  const skusCollection = collection(firestoreDb, SKUS_COLLECTION);
-  const snapshot = await getDocs(skusCollection);
+  if (!firestoreDb) {
+    console.error("Firestore não inicializado em getSkus. Verifique a configuração do Firebase.");
+    return [];
+  }
+  const skusCollectionRef = collection(firestoreDb, SKUS_COLLECTION);
+  const snapshot = await getDocs(skusCollectionRef);
   const skus = snapshot.docs.map(mapDocToSku);
   return skus.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function getSkuById(id: string): Promise<SKU | undefined> {
-  if (!firestoreDb) throw new Error("Firestore not initialized.");
+  if (!firestoreDb) {
+    console.error("Firestore não inicializado em getSkuById. Verifique a configuração do Firebase.");
+    return undefined;
+  }
   const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, id);
   const docSnap = await getDoc(skuDocRef);
   if (docSnap.exists()) {
@@ -42,6 +55,9 @@ export async function getSkuById(id: string): Promise<SKU | undefined> {
 }
 
 export async function createSku(formData: SkuFormData) {
+  if (!firestoreDb) {
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
+  }
   const validatedFields = SkuSchema.safeParse(formData);
 
   if (!validatedFields.success) {
@@ -50,14 +66,9 @@ export async function createSku(formData: SkuFormData) {
       message: 'Falha ao criar SKU. Verifique os campos.',
     };
   }
-
-  if (!firestoreDb) {
-      return { message: 'Erro de conexão com o banco de dados.', error: true };
-  }
   
   const { code, description, unitOfMeasure } = validatedFields.data;
 
-  // Verificar se SKU com o mesmo código já existe
   const q = query(collection(firestoreDb, SKUS_COLLECTION), where("code", "==", code));
   const querySnapshot = await getDocs(q);
   if (!querySnapshot.empty) {
@@ -72,11 +83,12 @@ export async function createSku(formData: SkuFormData) {
     code,
     description,
     unitOfMeasure,
-    createdAt: Timestamp.fromDate(now),
-    updatedAt: Timestamp.fromDate(now),
+    createdAt: Timestamp.fromDate(now), // Use Firestore Timestamp
+    updatedAt: Timestamp.fromDate(now), // Use Firestore Timestamp
   };
 
   try {
+    // Firestore irá gerar o ID automaticamente com addDoc
     const docRef = await addDoc(collection(firestoreDb, SKUS_COLLECTION), newSkuData);
     revalidatePath('/skus');
     revalidatePath('/production-orders'); 
@@ -84,12 +96,15 @@ export async function createSku(formData: SkuFormData) {
     revalidatePath('/dashboard'); 
     return { message: 'SKU criado com sucesso.', sku: { id: docRef.id, ...newSkuData, createdAt: now, updatedAt: now } };
   } catch (error) {
-    console.error("Error creating SKU:", error);
-    return { message: 'Erro ao criar SKU no banco de dados.', error: true };
+    console.error("Error creating SKU in Firestore:", error);
+    return { message: 'Erro ao criar SKU no banco de dados. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
 
 export async function updateSku(id: string, formData: SkuFormData) {
+  if (!firestoreDb) {
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
+  }
   const validatedFields = SkuSchema.safeParse(formData);
 
   if (!validatedFields.success) {
@@ -99,14 +114,9 @@ export async function updateSku(id: string, formData: SkuFormData) {
     };
   }
   
-  if (!firestoreDb) {
-      return { message: 'Erro de conexão com o banco de dados.', error: true };
-  }
-
   const { code, description, unitOfMeasure } = validatedFields.data;
   const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, id);
 
-  // Verificar se SKU com o mesmo código já existe (e não é o SKU atual)
   const q = query(collection(firestoreDb, SKUS_COLLECTION), where("code", "==", code));
   const querySnapshot = await getDocs(q);
   if (!querySnapshot.empty && querySnapshot.docs.some(docSnap => docSnap.id !== id)) {
@@ -120,28 +130,38 @@ export async function updateSku(id: string, formData: SkuFormData) {
     code,
     description,
     unitOfMeasure,
-    updatedAt: Timestamp.fromDate(new Date()),
+    updatedAt: Timestamp.fromDate(new Date()), // Use Firestore Timestamp
   };
 
   try {
-    await setDoc(skuDocRef, updatedSkuData, { merge: true }); // merge: true para não sobrescrever createdAt
+    await setDoc(skuDocRef, updatedSkuData, { merge: true }); 
     revalidatePath('/skus');
     revalidatePath('/production-orders');
     revalidatePath('/demand-planning');
     revalidatePath('/dashboard');
-    return { message: 'SKU atualizado com sucesso.', sku: { id, ...updatedSkuData, createdAt: new Date() /* Placeholder, read it back for actual */, updatedAt: new Date(updatedSkuData.updatedAt.toDate().getTime()) } };
+    
+    // Para retornar o SKU completo, você precisaria buscar o createdAt original ou o documento inteiro
+    const originalSku = await getSkuById(id); // Re-fetch to get consistent data
+    return { 
+        message: 'SKU atualizado com sucesso.', 
+        sku: { 
+            id, 
+            ...updatedSkuData, 
+            createdAt: originalSku?.createdAt || new Date(), // Use fetched createdAt
+            updatedAt: updatedSkuData.updatedAt.toDate() 
+        } 
+    };
   } catch (error) {
-    console.error("Error updating SKU:", error);
-    return { message: 'Erro ao atualizar SKU no banco de dados.', error: true };
+    console.error("Error updating SKU in Firestore:", error);
+    return { message: 'Erro ao atualizar SKU no banco de dados. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
 
 export async function deleteSku(id: string) {
   if (!firestoreDb) {
-      return { message: 'Erro de conexão com o banco de dados.', error: true };
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
   }
 
-  // Verificar se SKU está em uso
   const poQuery = query(collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION), where("skuId", "==", id));
   const demandQuery = query(collection(firestoreDb, DEMANDS_COLLECTION), where("skuId", "==", id));
   
@@ -159,14 +179,14 @@ export async function deleteSku(id: string) {
     revalidatePath('/dashboard');
     return { message: 'SKU excluído com sucesso.' };
   } catch (error) {
-    console.error("Error deleting SKU:", error);
-    return { message: 'Erro ao excluir SKU no banco de dados.', error: true };
+    console.error("Error deleting SKU from Firestore:", error);
+    return { message: 'Erro ao excluir SKU no banco de dados. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
 
 export async function deleteMultipleSkus(ids: string[]) {
   if (!firestoreDb) {
-    return { message: 'Erro de conexão com o banco de dados.', error: true };
+    return { message: 'Erro de conexão com o banco de dados. Firestore não inicializado.', error: true };
   }
   if (!ids || ids.length === 0) {
     return { message: 'Nenhum SKU selecionado para exclusão.', error: true };
@@ -221,7 +241,7 @@ export async function deleteMultipleSkus(ids: string[]) {
       error: inUseCount > 0 || notFoundIds.length > 0 
     };
   } catch (error) {
-    console.error("Error deleting multiple SKUs:", error);
-    return { message: 'Erro ao excluir SKUs em massa.', error: true };
+    console.error("Error deleting multiple SKUs from Firestore:", error);
+    return { message: 'Erro ao excluir SKUs em massa. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
