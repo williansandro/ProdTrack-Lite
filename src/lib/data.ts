@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, addDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
@@ -39,6 +40,9 @@ const firebaseConfig = {
 //     }
 //   }
 // }
+// =====================================================================================
+// !! IMPORTANTE !! VERIFIQUE SE O FATURAMENTO ESTÁ ATIVADO NO SEU PROJETO GOOGLE CLOUD !!
+// Alguns serviços ou limites de uso do Firebase podem exigir que o faturamento esteja habilitado.
 // =====================================================================================
 
 
@@ -193,3 +197,4 @@ export const generateId = (): string => {
 // Exportações específicas para cada tipo de dado (SKU, ProductionOrder, Demand)
 // permanecem nos seus respectivos arquivos de actions (sku.actions.ts, etc.)
 // Este arquivo (data.ts) agora foca na configuração do Firebase e funções genéricas de CRUD.
+
