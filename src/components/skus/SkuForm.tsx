@@ -15,35 +15,34 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { createSku, updateSku } from '@/lib/actions/sku.actions';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { PackagePlus } from 'lucide-react';
+import { PackagePlus, Save } from 'lucide-react';
 
 const SkuFormSchema = z.object({
   code: z.string().min(1, 'Código é obrigatório').max(50, 'Código deve ter 50 caracteres ou menos'),
-  description: z.string().min(1, 'Descrição é obrigatória').max(255, 'Descrição deve ter 255 caracteres ou menos'),
+  description: z.string().min(1, 'Nome/Descrição é obrigatório').max(255, 'Nome/Descrição deve ter 255 caracteres ou menos'),
   unitOfMeasure: z.string().min(1, 'Unidade de Medida é obrigatória').max(10, 'Un. Medida deve ter 10 caracteres ou menos'),
 });
 
 interface SkuFormProps {
   sku?: SKU | null; 
   onFormSubmit?: () => void; 
-  // Removed isDialogOpen and setIsDialogOpen, dialog visibility should be managed by parent SkuClientPage
 }
 
 export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
   const { toast } = useToast();
   const router = useRouter();
+  const isEditMode = !!sku;
   
   const form = useForm<SkuFormData>({
     resolver: zodResolver(SkuFormSchema),
     defaultValues: {
-      code: sku?.code || '',
-      description: sku?.description || '',
-      unitOfMeasure: sku?.unitOfMeasure || '',
+      code: '',
+      description: '',
+      unitOfMeasure: '',
     },
   });
 
@@ -55,7 +54,7 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
         unitOfMeasure: sku.unitOfMeasure,
       });
     } else {
-      form.reset({
+      form.reset({ // Reset to empty for create form
         code: '',
         description: '',
         unitOfMeasure: '',
@@ -66,7 +65,7 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
   async function onSubmit(data: SkuFormData) {
     try {
       let result;
-      if (sku && sku.id) {
+      if (isEditMode && sku?.id) {
         result = await updateSku(sku.id, data);
       } else {
         result = await createSku(data);
@@ -80,7 +79,7 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
           });
         });
         toast({
-          title: 'Erro',
+          title: 'Erro de Validação',
           description: result.message || 'Falha ao salvar SKU.',
           variant: 'destructive',
         });
@@ -89,16 +88,18 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
           title: 'Sucesso!',
           description: result.message,
         });
-        if (onFormSubmit) { // Call this if provided, e.g. to close a dialog
+        if (onFormSubmit) { 
           onFormSubmit();
         }
-        form.reset(); // Reset form after successful submission if it's a create form
+        if (!isEditMode) { // Reset form only for create mode
+          form.reset(); 
+        }
         router.refresh(); 
       }
     } catch (error) {
       console.error('Form submission error:', error);
       toast({
-        title: 'Erro',
+        title: 'Erro Inesperado',
         description: 'Ocorreu um erro inesperado.',
         variant: 'destructive',
       });
@@ -116,7 +117,7 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
               <FormItem>
                 <FormLabel>Código do SKU</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: PROD001" {...field} />
+                  <Input placeholder="Ex: PROD001" {...field} disabled={form.formState.isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -129,7 +130,7 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
               <FormItem>
                 <FormLabel>Nome/Descrição</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: Camiseta Azul M" {...field} />
+                  <Input placeholder="Ex: Camiseta Azul M" {...field} disabled={form.formState.isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -142,7 +143,7 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
               <FormItem>
                 <FormLabel>Unidade de Medida</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: Peça, KG, Metro" {...field} />
+                  <Input placeholder="Ex: Peça, KG, Metro" {...field} disabled={form.formState.isSubmitting}/>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -150,31 +151,15 @@ export function SkuForm({ sku, onFormSubmit }: SkuFormProps) {
           />
         </div>
         
-        {/* Textarea removed as per image, description is now a simple input */}
-        {/* <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Descrição Detalhada (Opcional)</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Descrição detalhada do SKU" {...field} className="min-h-[100px]" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        /> */}
-
-        <div className="flex justify-end pt-2">
-          {/* Cancel button removed, form submission should handle dialog close via onFormSubmit */}
-          {/* {onFormSubmit && ( 
+        <div className="flex justify-end pt-2 space-x-2">
+          {isEditMode && onFormSubmit && ( 
              <Button type="button" variant="outline" onClick={onFormSubmit} disabled={form.formState.isSubmitting}>
                 Cancelar
              </Button>
-          )} */}
+          )}
           <Button type="submit" disabled={form.formState.isSubmitting} className="bg-primary hover:bg-primary/90">
-            <PackagePlus className="mr-2 h-5 w-5" />
-            {form.formState.isSubmitting ? (sku ? 'Salvando...' : 'Cadastrando...') : (sku ? 'Salvar Alterações' : 'Cadastrar SKU')}
+            {isEditMode ? <Save className="mr-2 h-5 w-5" /> : <PackagePlus className="mr-2 h-5 w-5" />}
+            {form.formState.isSubmitting ? (isEditMode ? 'Salvando...' : 'Cadastrando...') : (isEditMode ? 'Salvar Alterações' : 'Cadastrar SKU')}
           </Button>
         </div>
       </form>

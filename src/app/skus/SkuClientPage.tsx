@@ -15,13 +15,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger, // Will not be used directly, Dialog open state managed by isEditFormOpen
+} from '@/components/ui/dialog';
 import { SkuForm } from '@/components/skus/SkuForm';
 import { DataTable } from '@/components/shared/DataTable';
 import { Edit3, Trash2, MoreHorizontal, Trash, PackagePlus, ListChecks } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { deleteSku, deleteMultipleSkus } from '@/lib/actions/sku.actions';
-import { FormattedDateCell } from '@/components/shared/FormattedDateCell';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 
 interface SkuClientPageProps {
@@ -29,28 +35,28 @@ interface SkuClientPageProps {
 }
 
 export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
-  // Note: Dialog for editing is removed, form will be inline or a separate page if complex editing needed
-  // For now, SkuForm is used for creation directly in the "Cadastrar Novo SKU" card.
-  // Editing could be implemented by navigating to a new page /skus/[id]/edit or using a modal triggered by the edit button.
-  // The current SkuForm can accept an 'sku' prop for editing, but its display logic here is simplified.
-
   const [deletingSku, setDeletingSku] = useState<SKU | null>(null);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
-  const [editingSkuModal, setEditingSkuModal] = useState<SKU | null>(null); // For a modal edit, not used yet
+  const [editingSku, setEditingSku] = useState<SKU | null>(null);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
 
   const { toast } = useToast();
 
-  const handleFormSubmit = () => {
-    // This would be called by SkuForm, e.g., to close a dialog if it were used for editing.
-    // For the inline creation form, it might just reset the form or give feedback.
+  const handleCreateFormSubmit = () => {
+    // This is for the inline creation form, might reset or give feedback.
+    // The edit form dialog will handle its own closing via onFormSubmit prop in SkuForm
+  };
+
+  const handleEditFormSubmit = () => {
+    setIsEditFormOpen(false);
+    setEditingSku(null);
+    // Data revalidation handled by server action in SkuForm
   };
 
   const openEditForm = (sku: SKU) => {
-    // For now, this doesn't open a dialog. An edit page or modal would be needed.
-    // setEditingSkuModal(sku); // If using an edit modal
-    toast({ title: "Editar SKU", description: `Funcionalidade de edição para ${sku.code} a ser implementada.`, variant: "default"});
-    console.log("Edit SKU:", sku);
+    setEditingSku(sku);
+    setIsEditFormOpen(true);
   };
 
   const openDeleteConfirm = (sku: SKU) => {
@@ -95,7 +101,7 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
     },
     {
       accessorKey: "description",
-      header: "Nome", // Changed from "Descrição"
+      header: "Nome", 
       cell: ({ row }) => <div className="truncate max-w-xs">{row.original.description}</div>,
     },
     {
@@ -103,17 +109,6 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
       header: "Un. Medida",
       cell: ({ row }) => row.original.unitOfMeasure,
     },
-    // CreatedAt and UpdatedAt columns removed as per image
-    // {
-    //   accessorKey: "createdAt",
-    //   header: "Criado Em",
-    //   cell: ({ row }) => <FormattedDateCell dateValue={row.original.createdAt} />,
-    // },
-    // {
-    //   accessorKey: "updatedAt",
-    //   header: "Atualizado Em",
-    //   cell: ({ row }) => <FormattedDateCell dateValue={row.original.updatedAt} />,
-    // },
     {
       id: "actions",
       header: "Ações",
@@ -130,26 +125,6 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
               <span className="sr-only">Excluir</span>
             </Button>
           </div>
-          // Dropdown menu removed for direct icon buttons as per image
-          // <DropdownMenu>
-          //   <DropdownMenuTrigger asChild>
-          //     <Button variant="ghost" className="h-8 w-8 p-0">
-          //       <span className="sr-only">Abrir menu</span>
-          //       <MoreHorizontal className="h-4 w-4" />
-          //     </Button>
-          //   </DropdownMenuTrigger>
-          //   <DropdownMenuContent align="end" className="bg-card border-border">
-          //     <DropdownMenuLabel>Ações</DropdownMenuLabel>
-          //     <DropdownMenuItem onClick={() => openEditForm(sku)}>
-          //       <Edit3 className="mr-2 h-4 w-4" />
-          //       Editar
-          //     </DropdownMenuItem>
-          //     <DropdownMenuItem onClick={() => openDeleteConfirm(sku)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-          //       <Trash2 className="mr-2 h-4 w-4" />
-          //       Excluir
-          //     </DropdownMenuItem>
-          //   </DropdownMenuContent>
-          // </DropdownMenu>
         );
       },
     },
@@ -158,7 +133,6 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Section for Creating New SKU */}
       <Card className="bg-card border-border shadow-lg">
         <CardHeader className="pb-4">
           <div className="flex items-center space-x-2">
@@ -167,11 +141,10 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <SkuForm onFormSubmit={handleFormSubmit} />
+          <SkuForm onFormSubmit={handleCreateFormSubmit} />
         </CardContent>
       </Card>
       
-      {/* Section for Listing SKUs */}
       <Card className="bg-card border-border shadow-lg">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -196,8 +169,8 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
           <DataTable
             columns={columns}
             data={initialSkus}
-            filterColumn="code" // Keep filtering if desired, though not shown in image
-            filterPlaceholder="Filtrar por código..." //
+            filterColumn="code"
+            filterPlaceholder="Filtrar por código..."
             enableRowSelection={true}
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
@@ -206,6 +179,23 @@ export function SkuClientPage({ initialSkus }: SkuClientPageProps) {
         </CardContent>
       </Card>
 
+      {/* Edit SKU Dialog */}
+      <Dialog open={isEditFormOpen} onOpenChange={(open) => { setIsEditFormOpen(open); if(!open) setEditingSku(null); }}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-accent">Editar SKU</DialogTitle>
+            <DialogDescription>
+              Atualize os detalhes do SKU {editingSku?.code}.
+            </DialogDescription>
+          </DialogHeader>
+          {editingSku && (
+            <SkuForm
+              sku={editingSku}
+              onFormSubmit={handleEditFormSubmit}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {deletingSku && (
         <AlertDialog open={!!deletingSku} onOpenChange={() => setDeletingSku(null)}>
