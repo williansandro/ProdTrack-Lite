@@ -1,5 +1,5 @@
 
-import type { SKU, ProductionOrder, Demand, ProductionOrderStatus } from './types';
+import type { SKU, ProductionOrder, Demand } from './types';
 
 interface DataStore {
   skus: SKU[];
@@ -10,49 +10,45 @@ interface DataStore {
 // Helper to generate unique IDs
 export const generateId = (prefix: string = 'id') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
 
-// Initialize with empty arrays to ensure no persistent mock data
-const initialSkus: SKU[] = [];
-const initialProductionOrders: ProductionOrder[] = [];
-const initialDemands: Demand[] = [];
-
-
-function createInitialDataStore(): DataStore {
-  // Deep copy initial data to prevent modification of the original arrays
-  // Ensures that if these arrays were to have data for some reason, they are freshly copied.
+// This function always creates a new store with empty arrays.
+// It's used to initialize the store if it doesn't exist or for production.
+function createEmptyDataStore(): DataStore {
   return {
-    skus: JSON.parse(JSON.stringify(initialSkus)),
-    productionOrders: JSON.parse(JSON.stringify(initialProductionOrders)),
-    demands: JSON.parse(JSON.stringify(initialDemands)),
+    skus: [],
+    productionOrders: [],
+    demands: [],
   };
 }
 
-// Augment the global NodeJS namespace if in a Node.js environment
+// Augment the global NodeJS namespace to declare our global DB variable
 declare global {
   // eslint-disable-next-line no-var
-  var __db__: DataStore | undefined;
-  // eslint-disable-next-line no-var
-  var __data_initialized__: boolean | undefined;
+  var __PCP_TRACKER_DB_INSTANCE__: DataStore | undefined;
 }
 
 let db: DataStore;
 
-const g = globalThis as typeof globalThis & { __db__?: DataStore, __data_initialized__?: boolean };
+// Cast globalThis to include our custom property
+const g = globalThis as typeof globalThis & { __PCP_TRACKER_DB_INSTANCE__?: DataStore };
 
 if (process.env.NODE_ENV === 'production') {
-  // In production, always start with a clean, empty store.
-  // If persistence is needed in production, a real database should be used.
-  db = createInitialDataStore();
+  // In production, always start with a fresh, empty store.
+  // For actual persistence in production, a real database solution (e.g., Firebase Firestore, Supabase, PostgreSQL) should be used.
+  db = createEmptyDataStore();
 } else {
-  // In development, we use a global variable to persist data across HMR updates.
-  if (!g.__db__ || !g.__data_initialized__) {
-    // console.log('Development: Initializing in-memory database (empty).');
-    g.__db__ = createInitialDataStore();
-    g.__data_initialized__ = true; // Mark as initialized to prevent re-seeding with empty data on every HMR
+  // In development, we use a global variable to persist the DataStore instance across HMR updates.
+  // This ensures that data entered during a dev session is not lost on file changes/reloads.
+  if (!g.__PCP_TRACKER_DB_INSTANCE__) {
+    // If the global instance doesn't exist (e.g., on first server start),
+    // initialize it with an empty store.
+    // console.log('Development: Initializing new empty in-memory database for this session.');
+    g.__PCP_TRACKER_DB_INSTANCE__ = createEmptyDataStore();
   } else {
-    // console.log('Development: Re-using existing in-memory database.');
+    // If it exists, re-use it.
+    // console.log('Development: Re-using existing in-memory database for this session.');
   }
-  db = g.__db__;
+  // Assign the (potentially existing) global instance to our exported 'db'.
+  db = g.__PCP_TRACKER_DB_INSTANCE__;
 }
 
 export { db };
-
