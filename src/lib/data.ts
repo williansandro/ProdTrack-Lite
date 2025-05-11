@@ -198,3 +198,4 @@ export const generateId = (): string => {
 // permanecem nos seus respectivos arquivos de actions (sku.actions.ts, etc.)
 // Este arquivo (data.ts) agora foca na configuração do Firebase e funções genéricas de CRUD.
 
+
