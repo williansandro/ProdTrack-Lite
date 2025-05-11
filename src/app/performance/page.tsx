@@ -5,7 +5,7 @@ import type { PerformanceSkuData, SKU, ProductionOrder } from '@/lib/types';
 import { PerformanceClientPage } from './PerformanceClientPage';
 import { Package } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; // Ensures the page is always dynamically rendered
 
 export default async function PerformancePage() {
   const skus = await getSkus();
@@ -75,3 +75,6 @@ export default async function PerformancePage() {
 
   return <PerformanceClientPage performanceData={performanceData} />;
 }
+
+
+    

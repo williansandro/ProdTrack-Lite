@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -7,11 +8,10 @@ import {
   DEMANDS_COLLECTION, 
   SKUS_COLLECTION, 
   PRODUCTION_ORDERS_COLLECTION, 
-  firestoreDb, // Import firestoreDb
-  generateId, 
+  firestoreDb,
   Timestamp 
 } from '@/lib/data';
-import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore'; // serverTimestamp removido
+import { collection, doc, addDoc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { format, parse, getMonth, getYear } from 'date-fns';
 
 const DemandFormSchema = z.object({
@@ -29,6 +29,7 @@ function mapDocToDemand(docSnap: any): Demand {
   return {
     id: docSnap.id,
     ...data,
+    skuCode: data.skuCode || 'N/A', // Initialize skuCode
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt?.seconds * 1000 || Date.now()),
     updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt?.seconds * 1000 || Date.now()),
   } as Demand;
@@ -39,48 +40,58 @@ export async function getDemandsWithProgress(): Promise<DemandWithProgress[]> {
     console.error("Firestore não inicializado em getDemandsWithProgress. Verifique a configuração do Firebase.");
     return [];
   }
+
   const demandsCollectionRef = collection(firestoreDb, DEMANDS_COLLECTION);
-  const demandsSnapshot = await getDocs(demandsCollectionRef);
+  const skusCollectionRef = collection(firestoreDb, SKUS_COLLECTION);
+  const allCompletedPoQuery = query(
+    collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION),
+    where("status", "==", "completed")
+  );
+
+  // Fetch demands, SKUs, and completed POs in parallel
+  const [demandsSnapshot, skusSnapshot, allCompletedPoSnapshot] = await Promise.all([
+    getDocs(demandsCollectionRef),
+    getDocs(skusCollectionRef),
+    getDocs(allCompletedPoQuery)
+  ]);
+
   const demands = demandsSnapshot.docs.map(mapDocToDemand);
+
+  const skusMap = new Map<string, string>(); // Map SKU ID to SKU Code
+  skusSnapshot.docs.forEach(skuDoc => {
+    skusMap.set(skuDoc.id, skuDoc.data()?.code || 'N/A');
+  });
+  
+  const allCompletedPOs = allCompletedPoSnapshot.docs.map(poDoc => {
+    const data = poDoc.data();
+    return {
+        id: poDoc.id,
+        skuId: data.skuId,
+        status: data.status,
+        endTime: data.endTime instanceof Timestamp ? data.endTime.toMillis() : (typeof data.endTime === 'number' ? data.endTime : null),
+        deliveredQuantity: data.deliveredQuantity,
+    } as Pick<ProductionOrder, 'id' | 'skuId' | 'status' | 'endTime' | 'deliveredQuantity'>;
+  });
 
   const demandsWithProgress: DemandWithProgress[] = [];
 
   for (const demand of demands) {
-    if (demand.skuId) {
-        const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, demand.skuId);
-        const skuDoc = await getDoc(skuDocRef);
-        if (skuDoc.exists()) {
-            demand.skuCode = skuDoc.data()?.code || 'N/A';
-        } else {
-             demand.skuCode = 'N/A (Excluído)';
-        }
-    } else {
-        demand.skuCode = 'N/A';
-    }
+    // Populate skuCode using the skusMap
+    demand.skuCode = demand.skuId ? (skusMap.get(demand.skuId) || 'N/A (Excluído)') : 'N/A';
 
     const [yearStr, monthStr] = demand.monthYear.split('-');
     const demandMonth = parseInt(monthStr, 10) - 1;
     const demandYear = parseInt(yearStr, 10);
 
-    const poQuery = query(
-      collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION),
-      where("skuId", "==", demand.skuId),
-      where("status", "==", "completed")
-    );
-    const poSnapshot = await getDocs(poQuery);
     let producedQuantity = 0;
-    poSnapshot.forEach(poDoc => {
-      const poData = poDoc.data();
-      // Ensure endTime is a Firestore Timestamp before converting
-      if (poData.endTime && poData.endTime instanceof Timestamp) {
-        const completionDate = poData.endTime.toDate();
-        if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
-          producedQuantity += poData.deliveredQuantity;
-        }
-      } else if (poData.endTime && typeof poData.endTime === 'number') { // Handle if endTime is stored as millis (fallback)
-         const completionDate = new Date(poData.endTime);
-         if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
-          producedQuantity += poData.deliveredQuantity;
+    // Filter the pre-fetched POs in memory
+    allCompletedPOs.forEach(poData => {
+      if (poData.skuId === demand.skuId) {
+        if (poData.endTime) { 
+          const completionDate = new Date(poData.endTime);
+          if (getMonth(completionDate) === demandMonth && getYear(completionDate) === demandYear && typeof poData.deliveredQuantity === 'number') {
+            producedQuantity += poData.deliveredQuantity;
+          }
         }
       }
     });
@@ -211,7 +222,7 @@ export async function updateDemand(id: string, formData: DemandFormData) {
         message: 'Demanda atualizada com sucesso.', 
         demand: { 
             id, 
-            ...originalDemand, // Keep original createdAt
+            ...originalDemand, 
             ...updatedDemandData, 
             updatedAt: updatedDemandData.updatedAt.toDate() 
         } 
@@ -264,3 +275,6 @@ export async function deleteMultipleDemands(ids: string[]) {
     return { message: 'Erro ao excluir demandas em massa. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
+
+
+    

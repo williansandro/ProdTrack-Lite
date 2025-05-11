@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -6,11 +7,10 @@ import type { ProductionOrder, ProductionOrderFormData, ProductionOrderStatus, S
 import { 
   PRODUCTION_ORDERS_COLLECTION, 
   SKUS_COLLECTION, 
-  firestoreDb, // Import firestoreDb
-  generateId, 
+  firestoreDb,
   Timestamp 
 } from '@/lib/data';
-import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore'; // serverTimestamp removido pois usamos Timestamp.fromDate(new Date()) ou Timestamp.now()
+import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 
 const ProductionOrderSchema = z.object({
   skuId: z.string().min(1, { message: 'SKU é obrigatório.' }),
@@ -27,10 +27,12 @@ function mapDocToProductionOrder(docSnap: any): ProductionOrder {
   return {
     id: docSnap.id,
     ...data,
+    // Ensure skuCode is initialized, it will be populated later if needed
+    skuCode: data.skuCode || 'N/A', 
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt?.seconds * 1000 || Date.now()),
     updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt?.seconds * 1000 || Date.now()),
-    startTime: data.startTime instanceof Timestamp ? data.startTime.toMillis() : (data.startTime || null),
-    endTime: data.endTime instanceof Timestamp ? data.endTime.toMillis() : (data.endTime || null),
+    startTime: data.startTime instanceof Timestamp ? data.startTime.toMillis() : (typeof data.startTime === 'number' ? data.startTime : null),
+    endTime: data.endTime instanceof Timestamp ? data.endTime.toMillis() : (typeof data.endTime === 'number' ? data.endTime : null),
   } as ProductionOrder;
 }
 
@@ -39,24 +41,28 @@ export async function getProductionOrders(): Promise<ProductionOrder[]> {
     console.error("Firestore não inicializado em getProductionOrders. Verifique a configuração do Firebase.");
     return [];
   }
+  
   const poCollectionRef = collection(firestoreDb, PRODUCTION_ORDERS_COLLECTION);
-  const snapshot = await getDocs(poCollectionRef);
-  const ordersPromises = snapshot.docs.map(async (docSnap) => {
+  const skusCollectionRef = collection(firestoreDb, SKUS_COLLECTION);
+
+  // Fetch POs and SKUs in parallel
+  const [poSnapshot, skusSnapshot] = await Promise.all([
+    getDocs(poCollectionRef),
+    getDocs(skusCollectionRef)
+  ]);
+
+  const skusMap = new Map<string, string>(); // Map SKU ID to SKU Code
+  skusSnapshot.docs.forEach(skuDoc => {
+    skusMap.set(skuDoc.id, skuDoc.data()?.code || 'N/A');
+  });
+
+  const orders = poSnapshot.docs.map(docSnap => {
     const order = mapDocToProductionOrder(docSnap);
-    if (order.skuId) {
-        const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, order.skuId);
-        const skuDoc = await getDoc(skuDocRef);
-        if (skuDoc.exists()) {
-            order.skuCode = skuDoc.data()?.code || 'N/A';
-        } else {
-            order.skuCode = 'N/A (Excluído)';
-        }
-    } else {
-        order.skuCode = 'N/A';
-    }
+    // Populate skuCode using the skusMap
+    order.skuCode = order.skuId ? (skusMap.get(order.skuId) || 'N/A (Excluído)') : 'N/A';
     return order;
   });
-  const orders = await Promise.all(ordersPromises);
+
   return orders.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
@@ -69,7 +75,7 @@ export async function getProductionOrderById(id: string): Promise<ProductionOrde
   const docSnap = await getDoc(poDocRef);
   if (docSnap.exists()) {
     const order = mapDocToProductionOrder(docSnap);
-    if (order.skuId) {
+    if (order.skuId && (!order.skuCode || order.skuCode === 'N/A')) { // Populate skuCode if missing
         const skuDocRef = doc(firestoreDb, SKUS_COLLECTION, order.skuId);
         const skuDoc = await getDoc(skuDocRef);
         if (skuDoc.exists()) {
@@ -77,8 +83,6 @@ export async function getProductionOrderById(id: string): Promise<ProductionOrde
         } else {
             order.skuCode = 'N/A (Excluído)';
         }
-    } else {
-        order.skuCode = 'N/A';
     }
     return order;
   }
@@ -170,10 +174,9 @@ export async function updateProductionOrder(id: string, formData: ProductionOrde
     updates.skuCode = skuSnap.data()?.code || 'N/A';
     updates.quantity = quantity;
   } else if (currentOrder.skuId !== skuId || currentOrder.quantity !== quantity) {
-    // Only allow notes update if not 'open' and other fields are attempted to be changed
      if (notes !== undefined && currentOrder.notes !== (notes || '')) {
         updates.notes = notes || '';
-     } else { // No changes or only restricted fields attempted
+     } else { 
         return { 
             message: 'SKU e Quantidade só podem ser alterados em pedidos "Abertos". Nenhuma alteração foi salva ou apenas observações foram salvas.', 
             errors: { 
@@ -184,16 +187,16 @@ export async function updateProductionOrder(id: string, formData: ProductionOrde
      }
   }
   
-  if (notes !== undefined) { // Allow notes update regardless of status (unless terminal)
+  if (notes !== undefined) { 
     updates.notes = notes || '';
   }
   
   try {
-    await updateDoc(orderDocRef, updates);
+    await updateDoc(orderDocRef, updates as any); // Use 'as any' to bypass strict type checking for partial updates if necessary
     revalidatePath('/production-orders');
     revalidatePath('/dashboard');
     
-    const updatedOrderDoc = await getDoc(orderDocRef); // Re-fetch to get all fields including those not updated
+    const updatedOrderDoc = await getDoc(orderDocRef); 
     const finalUpdatedOrder = mapDocToProductionOrder(updatedOrderDoc);
 
     return { message: 'Pedido de Produção atualizado com sucesso.', order: finalUpdatedOrder };
@@ -244,12 +247,12 @@ export async function completeProductionOrder(id: string, deliveredQuantity: num
     return { message: 'Quantidade entregue fornecida é inválida.', error: true };
   }
 
-  const endTimeMs = Date.now(); // Get current time in ms
+  const endTimeMs = Date.now(); 
   let totalProductionTimeMs: number | null = null;
   let secondsPerUnitVal: number | null = null;
 
   if (orderData.startTime) { 
-    totalProductionTimeMs = endTimeMs - orderData.startTime; // orderData.startTime is already in ms
+    totalProductionTimeMs = endTimeMs - orderData.startTime; 
     if (deliveredQuantity > 0 && totalProductionTimeMs > 0) {
       secondsPerUnitVal = (totalProductionTimeMs / 1000) / deliveredQuantity;
     }
@@ -258,7 +261,7 @@ export async function completeProductionOrder(id: string, deliveredQuantity: num
   try {
     await updateDoc(orderDocRef, {
       status: 'completed',
-      endTime: Timestamp.fromMillis(endTimeMs), // Store as Firestore Timestamp
+      endTime: Timestamp.fromMillis(endTimeMs), 
       totalProductionTime: totalProductionTimeMs,
       deliveredQuantity: deliveredQuantity,
       secondsPerUnit: secondsPerUnitVal,
@@ -386,3 +389,6 @@ export async function deleteMultipleProductionOrders(ids: string[]) {
     return { message: 'Erro ao excluir pedidos em massa. Verifique a conexão e as permissões do Firebase.', error: true };
   }
 }
+
+
+    
