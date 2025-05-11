@@ -1,4 +1,3 @@
-
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, addDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
@@ -21,11 +20,22 @@ const firebaseConfig = {
 // !! IMPORTANTE !! VERIFIQUE SUAS REGRAS DE SEGURANÇA DO FIRESTORE !! IMPORTANTE !!
 // No console do Firebase -> Firestore Database -> Regras.
 // Para desenvolvimento, você pode usar regras permissivas como:
+//
 // rules_version = '2';
 // service cloud.firestore {
 //   match /databases/{database}/documents {
 //     match /{document=**} {
 //       allow read, write: if true; // CUIDADO: MUDE PARA PRODUÇÃO!
+//     }
+//   }
+// }
+//
+// Se você implementou autenticação, suas regras devem ser mais específicas, por exemplo:
+// rules_version = '2';
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /{document=**} {
+//       allow read, write: if request.auth != null; // Permite acesso apenas para usuários autenticados
 //     }
 //   }
 // }
@@ -102,21 +112,21 @@ export async function readDocument<T extends { id: string }>(collectionName: str
  */
 export async function createDocument<T extends { id: string; createdAt: Date; updatedAt: Date }>(
   collectionName: string,
-  data: Omit<T, 'id' | 'createdAt' | 'updatedAt'>
+  data: Omit<T, 'id' | 'createdAt' | 'updatedAt'> & Partial<Pick<T, 'createdAt' | 'updatedAt'>>
 ): Promise<T> {
   if (!firestoreDb) throw new Error("Firestore not initialized.");
   const now = Timestamp.now();
-  // Firestore gerará o ID se usarmos addDoc
+  
   const docRef = await addDoc(collection(firestoreDb, collectionName), {
     ...data,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: data.createdAt instanceof Date ? Timestamp.fromDate(data.createdAt) : (data.createdAt || now),
+    updatedAt: data.updatedAt instanceof Date ? Timestamp.fromDate(data.updatedAt) : (data.updatedAt || now),
   });
   return {
-    id: docRef.id, // ID gerado pelo Firestore
+    id: docRef.id, 
     ...data,
-    createdAt: now.toDate(),
-    updatedAt: now.toDate(),
+    createdAt: (data.createdAt instanceof Date ? data.createdAt : (data.createdAt as Timestamp || now).toDate()),
+    updatedAt: (data.updatedAt instanceof Date ? data.updatedAt : (data.updatedAt as Timestamp || now).toDate()),
   } as T;
 }
 
@@ -179,3 +189,7 @@ export const generateId = (): string => {
   if (!firestoreDb) throw new Error("Firestore not initialized when generating ID.");
   return doc(collection(firestoreDb, '_temp_id_generator_')).id;
 };
+
+// Exportações específicas para cada tipo de dado (SKU, ProductionOrder, Demand)
+// permanecem nos seus respectivos arquivos de actions (sku.actions.ts, etc.)
+// Este arquivo (data.ts) agora foca na configuração do Firebase e funções genéricas de CRUD.
