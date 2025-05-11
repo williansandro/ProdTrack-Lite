@@ -30,9 +30,16 @@ export default async function DashboardPage() {
   let skus, productionOrders, demandsWithProgress;
 
   try {
-    skus = await getSkus();
-    productionOrders = await getProductionOrders();
-    demandsWithProgress = await getDemandsWithProgress();
+    // Fetch data in parallel
+    const [skusData, productionOrdersData, demandsWithProgressData] = await Promise.all([
+      getSkus(),
+      getProductionOrders(),
+      getDemandsWithProgress()
+    ]);
+    skus = skusData;
+    productionOrders = productionOrdersData;
+    demandsWithProgress = demandsWithProgressData;
+
   } catch (error: any) {
     console.error("Error fetching data for DashboardPage:", error);
     return (
